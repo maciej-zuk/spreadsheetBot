@@ -1,0 +1,17 @@
+{
+  "configs": [
+    {
+      "selectRange": "A1:D11",
+      "groupName": "group",
+      "notifyChannel": "channel",
+      "namesRow": 1,
+      "datesCol": 1,
+      "spreadsheetID": "1VYs24HCPuWz4GVs1Q0rRyVDQI6QwURt8wPBEs9vY0io",
+      "keepWhenMissing": true,
+      "notifyUsers": true,
+      "assignCharacter": "o"
+    }
+  ],
+  "googleAPIKey": "XYZ",
+  "slackAPIKey": "XYZ"
+}

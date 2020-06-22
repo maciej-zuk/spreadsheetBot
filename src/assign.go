@@ -1,19 +1,19 @@
 package src
 
 import (
-	"fmt"
 	"log"
+	"time"
 )
 
 // PerformAssign  -
-func PerformAssign(ctx *RuntimeContext) error {
-	hadErrors := false
 
+// PerformAssign  -
+func PerformAssign(ctx *RuntimeContext, date time.Time) {
 	for _, cfg := range ctx.Configs {
-		names, err := getCurrentAssignment(ctx, &cfg)
+		names, err := getCurrentAssignment(ctx, &cfg, date)
 		if err != nil {
 			log.Println("Error while loading assigned people from spreadsheet for group", cfg.GroupName, ":", err)
-			hadErrors = true
+			log.Println(Stack(err))
 			continue
 		}
 		if len(names) == 0 {
@@ -27,13 +27,8 @@ func PerformAssign(ctx *RuntimeContext) error {
 		err = assignUsersToUserGroups(ctx, names, &cfg)
 		if err != nil {
 			log.Println("Error while assigning user group", cfg.GroupName, ":", err)
-			hadErrors = true
+			log.Println(Stack(err))
 			continue
 		}
 	}
-
-	if hadErrors {
-		return fmt.Errorf("Encountered errors during assignment")
-	}
-	return nil
 }

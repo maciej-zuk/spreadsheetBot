@@ -1,20 +1,66 @@
 package src
 
 import (
-	"context"
 	"encoding/json"
-	"io/ioutil"
+	"fmt"
+	"log"
 	"math"
 	"strings"
 	"time"
 
-	"github.com/sahilm/fuzzy"
+	"github.com/go-errors/errors"
+	"github.com/schollz/closestmatch"
 	"github.com/slack-go/slack"
-	"google.golang.org/api/option"
-	"google.golang.org/api/sheets/v4"
 )
 
 var snDateBase time.Time = time.Date(1899, time.December, 30, 0, 0, 0, 0, time.UTC)
+
+// Stack -
+func Stack(err error) string {
+	if err == nil {
+		return "(no error)"
+	}
+	stack, ok := err.(*errors.Error)
+	if ok && stack != nil {
+		return stack.ErrorStack()
+	}
+	return "(no stack)"
+}
+
+func colNoToName(n int) string {
+	var b strings.Builder
+	r := 0
+	for n > 0 {
+		n--
+		n, r = n/26, n%26
+		b.WriteByte(byte(r) + 'A')
+	}
+	return b.String()
+}
+
+func nameToColNo(name string) int {
+	n := 0
+	for _, c := range name {
+		n = n*26 + 1 + int(c-'A')
+	}
+	return n
+}
+
+func nameToColRow(name string) (int, int) {
+	col := 0
+	row := 0
+	offset := 0
+	for i, c := range name {
+		if c >= 'A' && c <= 'Z' {
+			col = col*26 + 1 + int(c-'A')
+		} else {
+			offset = i
+			break
+		}
+	}
+	fmt.Sscanf(name[offset:], "%d", &row)
+	return col, row
+}
 
 func serialNumberToTime(sn float64) time.Time {
 	days := math.Floor(sn)
@@ -36,77 +82,135 @@ func cleanUpName(name string) string {
 	return name
 }
 
-func matchGroupToName(name string, groups []slack.UserGroup) *slack.UserGroup {
-	possibleGroups := fuzzy.FindFrom(name, UserGroupList(groups))
-	if len(possibleGroups) > 0 {
-		return &groups[possibleGroups[0].Index]
+func matchGroupToName(ctx *RuntimeContext, name string) *slack.UserGroup {
+	for _, group := range ctx.groups {
+		if group.Handle == name {
+			return &group
+		}
 	}
 	return nil
 }
 
-func matchUserToName(name string, users []slack.User) *slack.User {
-	possibleUsers := fuzzy.FindFrom(name, UserList(users))
-	if len(possibleUsers) > 0 {
-		return &users[possibleUsers[0].Index]
+func matchUserToName(ctx *RuntimeContext, name string) *slack.User {
+	match := ctx.usersMatcher.Closest(name)
+	for _, user := range ctx.users {
+		if user.RealName == match {
+			return &user
+		}
 	}
 	return nil
 }
 
-func matchChannelToName(name string, channels []slack.Channel) *slack.Channel {
-	possibleChannels := fuzzy.FindFrom(name, ChannelList(channels))
-	if len(possibleChannels) > 0 {
-		return &channels[possibleChannels[0].Index]
+func matchChannelToName(ctx *RuntimeContext, name string) *slack.Channel {
+	for _, channel := range ctx.channels {
+		if channel.Name == name {
+			return &channel
+		}
 	}
 	return nil
 }
 
-func matchPrivChannelToName(name string, channels []slack.Group) *slack.Group {
-	possibleChannels := fuzzy.FindFrom(name, PrivChannelList(channels))
-	if len(possibleChannels) > 0 {
-		return &channels[possibleChannels[0].Index]
+// VerifyNames -
+func VerifyNames(ctx *RuntimeContext) {
+	for _, cfg := range ctx.Configs {
+		fmt.Println("Verifying names for", cfg.GroupName)
+		names, err := getAllNames(ctx, &cfg)
+		if err != nil {
+			log.Println(Stack(err))
+			log.Println("Unable to load names for", cfg.GroupName)
+			continue
+		}
+		good := 0
+		bad := 0
+		for _, nameAndPos := range names {
+			user := matchUserToName(ctx, nameAndPos.name)
+			if user == nil {
+				fmt.Printf("[%s:%d] %s -> unable to match!\n",
+					colNoToName(nameAndPos.col),
+					nameAndPos.row,
+					nameAndPos.name,
+				)
+				bad++
+			} else {
+				fmt.Printf("[%s:%d] %s -> %s (@%s)\n",
+					colNoToName(nameAndPos.col),
+					nameAndPos.row,
+					nameAndPos.name,
+					user.RealName,
+					user.Name,
+				)
+				good++
+			}
+		}
+		fmt.Println(good, "matches,", bad, "missing")
 	}
-	return nil
 }
 
 // CreateContext -
-func CreateContext(fileName string) (*RuntimeContext, error) {
+func CreateContext(fileName string, io IOStrategy) (*RuntimeContext, error) {
 	var runtimeContext RuntimeContext
-	configFile, err := ioutil.ReadFile(fileName)
+	runtimeContext.io = io
+	configFile, err := io.LoadBytes(fileName)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, 0)
 	}
 
 	err = json.Unmarshal(configFile, &runtimeContext)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, 0)
 	}
 
-	runtimeContext.sheets, err = sheets.NewService(context.Background(), option.WithAPIKey(runtimeContext.GoogleAPIKey))
+	for n, cfg := range runtimeContext.Configs {
+		ranges := strings.Split(cfg.SelectRange, ":")
+		startRangeCol, startRangeRow := nameToColRow(ranges[0])
+		runtimeContext.Configs[n].namesRowNum = cfg.NamesRow - startRangeRow
+		runtimeContext.Configs[n].datesColNum = nameToColNo(cfg.DatesCol) - startRangeCol
+		runtimeContext.Configs[n].colOffset = startRangeCol
+		runtimeContext.Configs[n].rowOffset = startRangeRow
+	}
+
+	runtimeContext.sheets, err = getSheets(&runtimeContext)
 	if err != nil {
 		return nil, err
 	}
 
-	runtimeContext.slack = slack.New(runtimeContext.SlackAPIKey)
+	runtimeContext.slack = slack.New(runtimeContext.SlackBotAPIKey, slack.OptionDebug(false))
+	runtimeContext.slackP = slack.New(runtimeContext.SlackAccessAPIKey, slack.OptionDebug(false))
 
 	runtimeContext.groups, err = runtimeContext.slack.GetUserGroups()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, 0)
 	}
 
 	runtimeContext.users, err = runtimeContext.slack.GetUsers()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, 0)
 	}
 
-	runtimeContext.channels, err = runtimeContext.slack.GetChannels(true)
-	if err != nil {
-		return nil, err
+	runtimeContext.channels = make([]slack.Channel, 0)
+	channelsCursor := ""
+	for {
+		channels, nextCursor, err := runtimeContext.slack.GetConversations(&slack.GetConversationsParameters{
+			Cursor:          channelsCursor,
+			ExcludeArchived: "true",
+			Types:           []string{"public_channel", "private_channel"},
+		})
+		if err != nil {
+			return nil, errors.Wrap(err, 0)
+		}
+		runtimeContext.channels = append(runtimeContext.channels, channels...)
+		if nextCursor != "" {
+			channelsCursor = nextCursor
+		} else {
+			break
+		}
 	}
 
-	runtimeContext.privChannels, err = runtimeContext.slack.GetGroups(true)
-	if err != nil {
-		return nil, err
+	userNames := make([]string, len(runtimeContext.users))
+	for i, user := range runtimeContext.users {
+		userNames[i] = user.RealName
 	}
+	runtimeContext.usersMatcher = closestmatch.New(userNames, []int{2, 3, 4, 5, 6})
 
 	return &runtimeContext, nil
 }

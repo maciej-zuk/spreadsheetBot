@@ -5,13 +5,27 @@
       "groupName": "group",
       "notifyChannel": "channel",
       "namesRow": 1,
-      "datesCol": 1,
+      "datesCol": "A",
       "spreadsheetID": "1VYs24HCPuWz4GVs1Q0rRyVDQI6QwURt8wPBEs9vY0io",
       "keepWhenMissing": true,
       "notifyUsers": true,
       "assignCharacter": "o"
     }
   ],
-  "googleAPIKey": "XYZ",
-  "slackAPIKey": "XYZ"
+  "googleCredentialsJson": {
+    "installed": {
+      "client_id": "ABCD",
+      "project_id": "ABCD",
+      "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+      "token_uri": "https://oauth2.googleapis.com/token",
+      "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+      "client_secret": "ABCD",
+      "redirect_uris": [
+        "urn:ietf:wg:oauth:2.0:oob",
+        "http://localhost"
+      ]
+    }
+  },
+  "slackAccessAPIKey": "xoxp-...",
+  "slackBotAPIKey": "xoxb-..."
 }

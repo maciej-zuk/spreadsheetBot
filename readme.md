@@ -7,20 +7,18 @@
       "groupName": "group", // name of the user group that will be assigned
       "notifyChannel": "channel", // channel for schedule notifications, no notification if omitted
       "namesRow": 1, // row with names list
-      "datesCol": 1, // column with dates
+      "datesCol": "A", // column with dates
       "spreadsheetID": "1VYs24HCPuWz4GVs1Q0rRyVDQI6QwURt8wPBEs9vY0io", // spreadsheet id 
       "keepWhenMissing": true, // if there is missing assignment for a day "true" will keep existing assignments rather than unassigning everyone
       "notifyUsers": true, // true - notify users in direct message about todays schedule (during "assignGroups" action)
       "assignCharacter": "o" // character that is expected to indicate actual assignment
     } ...
   ],
-  "googleAPIKey": "XYZ",
-  "slackAPIKey": "XYZ"
+  "googleCredentialsJson": {...}, // or "googleAPIKey"
+  "slackAccessAPIKey": "xoxp-...",
+  "slackBotAPIKey": "xoxb-..."
 }
 ```
-
-### namesRow/datesCol
-Keep in mind that if `selectRange` starts from something other than `A1` you have to subtract some value from `namesRow`/`datesCol` eg. If you would normally have `datesCol=5` and `namesRow=3` but `selectRange` is updated to `C2` (3 cols, 2 row) you should correct `datesCol` to be 2 and `namesRow` to 2. Wrong setup will result in error message or simply no action.
 
 ### Spreadsheet ID
 in this url: https://docs.google.com/spreadsheets/d/1VYs24HCPuWz4GVs1Q0rRyVDQI6QwURt8wPBEs9vY0io/ ID is `1VYs24HCPuWz4GVs1Q0rRyVDQI6QwURt8wPBEs9vY0io`.
@@ -29,34 +27,62 @@ This is also demo spreadsheet with expected format for example config.
 ### Required Slack app scopes:
 
 Create Slack app here: https://api.slack.com/apps?new_app=1
+Due to Slack approach to user group management (ie. only owners/admins can modify it) it is required to have both user and bot scoped clients.
 
+Bot scopes:
 ```
 channels:read
+channels:join
 chat:write
 groups:read
 im:write
-usergroups:read
-usergroups:write
 users:read
 ```
+User scopes:
+```
+usergroups:read
+usergroups:write
+```
+User scope should be created by workspace admin.
 
 ### Required Google API scopes:
 Create Google project here https://console.developers.google.com/
-API key should be enough to access read-only spreadsheets
+API key should be enough fo read-only access of globally accessible spreadsheets.
+OAuth credentials has to be created for organization scoped spreadsheets.
 
+Add Spreadsheets API and following OAuth scope:
 ```
 ../auth/spreadsheets.readonly
 ```
+
+First run will prompt for client authorization and create additional token file (CLI only).
+
+### AWS Lambda:
+It is possible to deploy app on AWS Lambda, just build `lambda.go` rather than `main.go`.
+Lambda app will store sensitive data in SSM Parameter store, to use it create two params in SSM:
+
+- `/bot_config_prefix/config` - with config json
+- `/bot_config_prefix/token` - with token (authorize and generate using CLI)
+
+then pass prefix (`/bot_config_prefix/` in this example) as `SSM_KEY_PREFIX` env variable to lambda function.
 
 ### Usage summary:
 ```
 Usage of ./spbot:
   -assignGroups
-    	assign Slack groups for schedule in spreadsheet
+      assign Slack groups for schedule in spreadsheet
   -config string
-    	config file (default "config.json")
+      config file (default "config.json")
   -notifySlack
-    	notify Slack channels about schedule for this week
+      notify Slack channels about schedule for this week
+  -notifySlackNextWeek
+      notify Slack channels about schedule for next week
+  -notifySlackToday
+      notify Slack channels about schedule for today
   -printSchedule
-    	print textual schedule for this week
+      print textual schedule for this week
+  -printScheduleNextWeek
+      print textual schedule for next week
+  -printScheduleToday
+      print textual schedule for today
 ```

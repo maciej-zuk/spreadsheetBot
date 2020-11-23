@@ -7,12 +7,20 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
-func getNamesForDate(cfg *AssignmentsConfig, results *sheets.ValueRange, date time.Time) ([]string, error) {
-	selected := make([]string, 0)
+func getNamesForDate(cfg *AssignmentsConfig, results *sheets.ValueRange, date time.Time) ([]NameGroup, error) {
+	selected := make([]NameGroup, 0)
 	if cfg.namesRowNum < 0 || cfg.namesRowNum >= len(results.Values) {
 		return nil, errors.Errorf("Names row not found within spreadsheet")
 	}
 	names := results.Values[cfg.namesRowNum]
+	var groups []interface{}
+
+	hasGroupRows := false
+	if cfg.groupsRowNum >= 0 && cfg.groupsRowNum < len(results.Values) {
+		hasGroupRows = true
+		groups = results.Values[cfg.groupsRowNum]
+	}
+
 	for _, row := range results.Values {
 		if cfg.datesColNum < 0 || cfg.datesColNum >= len(row) {
 			return nil, errors.Errorf("Dates column not found within spreadsheet")
@@ -25,7 +33,15 @@ func getNamesForDate(cfg *AssignmentsConfig, results *sheets.ValueRange, date ti
 					if colString, ok := col.(string); ok && colString == cfg.AssignCharacter {
 						name, ok := names[colN].(string)
 						if ok {
-							selected = append(selected, cleanUpName(name))
+							group := ""
+							if hasGroupRows {
+								group, _ = groups[colN].(string)
+							}
+							nameGroup := NameGroup{
+								Name:  cleanUpName(name),
+								Group: cleanUpName(group),
+							}
+							selected = append(selected, nameGroup)
 						}
 					}
 				}
@@ -45,7 +61,7 @@ func getSpreadsheetData(ctx *RuntimeContext, cfg *AssignmentsConfig) (*sheets.Va
 		Do()
 }
 
-func getCurrentAssignment(ctx *RuntimeContext, cfg *AssignmentsConfig, date time.Time) ([]string, error) {
+func getCurrentAssignment(ctx *RuntimeContext, cfg *AssignmentsConfig, date time.Time) ([]NameGroup, error) {
 	result, err := getSpreadsheetData(ctx, cfg)
 	if err != nil {
 		return nil, errors.Wrap(err, 0)

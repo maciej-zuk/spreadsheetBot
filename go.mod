@@ -3,6 +3,8 @@ module spbot
 go 1.14
 
 require (
+	github.com/PagerDuty/go-pagerduty v1.3.0
+	github.com/agnivade/levenshtein v1.1.0
 	github.com/aws/aws-lambda-go v1.17.0 // indirect
 	github.com/aws/aws-sdk-go v1.32.5
 	github.com/go-errors/errors v1.1.1

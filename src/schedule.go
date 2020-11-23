@@ -28,15 +28,16 @@ func getScheduleForDate(
 	for _, entry := range schedule {
 		fmt.Fprintf(&b, "%s\t", entry.Date.Format(format))
 		if len(entry.Names) > 0 {
+			names := make([]string, len(entry.Names))
 			for n, name := range entry.Names {
-				user := matchUserToName(ctx, name)
+				user := matchUserToName(ctx, name.Name)
 				if user != nil {
-					entry.Names[n] = fmt.Sprintf("%s (%s @%s)", name, user.RealName, user.Name)
+					names[n] = fmt.Sprintf("%s (%s @%s)", name.Name, user.RealName, user.Name)
 				} else {
-					entry.Names[n] = fmt.Sprintf("%s (no Slack match!)", name)
+					names[n] = fmt.Sprintf("%s (no Slack match!)", name.Name)
 				}
 			}
-			fmt.Fprint(&b, strings.Join(entry.Names, ", "))
+			fmt.Fprint(&b, strings.Join(names, ", "))
 		} else {
 			if cfg.KeepWhenMissing {
 				if entry.Date.Weekday() == time.Sunday || entry.Date.Weekday() == time.Saturday {
@@ -68,15 +69,16 @@ func getScheduleForDateAsSlackBlocks(
 	for _, entry := range schedule {
 		var assignmentsStr string
 		if len(entry.Names) > 0 {
+			names := make([]string, len(entry.Names))
 			for n, name := range entry.Names {
-				user := matchUserToName(ctx, name)
+				user := matchUserToName(ctx, name.Name)
 				if user != nil {
-					entry.Names[n] = fmt.Sprintf("<@%s>", user.ID)
+					names[n] = fmt.Sprintf("<@%s>", user.ID)
 				} else {
-					entry.Names[n] = fmt.Sprintf("%s (no Slack match!)", name)
+					names[n] = fmt.Sprintf("%s (no Slack match!)", name)
 				}
 			}
-			assignmentsStr = strings.Join(entry.Names, ", ")
+			assignmentsStr = strings.Join(names, ", ")
 		} else {
 			if cfg.KeepWhenMissing {
 				if entry.Date.Weekday() == time.Sunday || entry.Date.Weekday() == time.Saturday {

@@ -6,8 +6,6 @@ import (
 )
 
 // PerformAssign  -
-
-// PerformAssign  -
 func PerformAssign(ctx *RuntimeContext, date time.Time) {
 	for _, cfg := range ctx.Configs {
 		names, err := getCurrentAssignment(ctx, &cfg, date)

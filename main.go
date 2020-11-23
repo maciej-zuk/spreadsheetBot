@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"log"
 	spbot "spbot/src"
 	"time"
 )
@@ -20,12 +19,14 @@ func main() {
 	notifySlackToday := flag.Bool("notifySlackToday", false, "notify Slack channels about schedule for today")
 	notifySlackNextWeek := flag.Bool("notifySlackNextWeek", false, "notify Slack channels about schedule for next week")
 
+	assignPagerDuty := flag.Bool("assignPagerDuty", false, "assign PagerDuty for this week")
+	assignPagerDutyNextWeek := flag.Bool("assignPagerDutyNextWeek", false, "assign PagerDuty for next week")
+	verifySlackNames := flag.Bool("verifySlackNames", false, "verify Slack <-> spreadsheet names")
+	verifyPagerDutyNames := flag.Bool("verifyPagerDutyNames", false, "verify PagerDuty <-> spreadsheet names")
+
 	flag.Parse()
 	io := spbot.CliIOStrategy{}
-	ctx, err := spbot.CreateContext(*configFile, &io)
-	if err != nil {
-		log.Fatalln(spbot.Stack(err))
-	}
+	ctx := spbot.CreateContext(*configFile, &io)
 
 	var (
 		startDate time.Time
@@ -33,13 +34,13 @@ func main() {
 		title     string
 	)
 
-	if *printSchedule || *notifySlack {
+	if *printSchedule || *notifySlack || *assignPagerDuty {
 		startDate = time.Now().In(time.UTC).Truncate(7 * 24 * time.Hour)
 		endDate = startDate.AddDate(0, 0, 5)
 		title = "schedule for this week"
 	}
 
-	if *printScheduleNextWeek || *notifySlackNextWeek {
+	if *printScheduleNextWeek || *notifySlackNextWeek || *assignPagerDutyNextWeek {
 		startDate = time.Now().In(time.UTC).Truncate(7*24*time.Hour).AddDate(0, 0, 7)
 		endDate = startDate.AddDate(0, 0, 5)
 		title = "schedule for next week"
@@ -52,20 +53,46 @@ func main() {
 	}
 
 	if *printSchedule || *printScheduleNextWeek || *printScheduleToday {
+		spbot.LoadSheets(ctx)
+		spbot.LoadSlack(ctx)
 		spbot.PrintScheduleForDateRange(ctx, startDate, endDate, title)
 		return
 	}
 
 	if *notifySlack || *notifySlackNextWeek || *notifySlackToday {
+		spbot.LoadSheets(ctx)
+		spbot.LoadSlack(ctx)
 		spbot.NotifySlackOfScheduleForDateRange(ctx, startDate, endDate, title)
 		return
 	}
 
 	if *assignGroups {
+		spbot.LoadSheets(ctx)
+		spbot.LoadSlack(ctx)
 		spbot.PerformAssign(ctx, time.Now())
 		return
 	}
 
-	spbot.VerifyNames(ctx)
+	if *assignPagerDuty || *assignPagerDutyNextWeek {
+		spbot.LoadPagerduty(ctx)
+		spbot.LoadSheets(ctx)
+		spbot.PagerDutyAssignTiers(ctx, startDate, endDate)
+		return
+	}
 
+	if *verifySlackNames {
+		spbot.LoadSheets(ctx)
+		spbot.LoadSlack(ctx)
+		spbot.VerifySlackNames(ctx)
+		return
+	}
+
+	if *verifyPagerDutyNames {
+		spbot.LoadSheets(ctx)
+		spbot.LoadPagerduty(ctx)
+		spbot.VerifyPagerDutyNames(ctx)
+		return
+	}
+
+	flag.PrintDefaults()
 }

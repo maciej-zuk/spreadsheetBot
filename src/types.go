@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/PagerDuty/go-pagerduty"
 	"github.com/schollz/closestmatch"
 	"github.com/slack-go/slack"
 	"google.golang.org/api/sheets/v4"
@@ -20,18 +21,47 @@ type IOStrategy interface {
 	Prompt() (string, error)
 }
 
+// PagerDutySlotAssignment -
+type PagerDutySlotAssignment struct {
+	DayOfWeek uint
+	User      string
+	StartUtc  string
+}
+
+// PagerDutyTierAssignment -
+type PagerDutyTierAssignment struct {
+	Assignments []PagerDutySlotAssignment
+	Group       string
+}
+
+// NameGroup -
+type NameGroup struct {
+	Name  string
+	Group string
+}
+
+// PagerDutyConfig -
+type PagerDutyConfig struct {
+	PolicyID string   `json:"policyID"`
+	Groups   []string `json:"groups"`
+	TierIDs  []string `json:"tierIDs"`
+}
+
 // AssignmentsConfig -
 type AssignmentsConfig struct {
-	SelectRange     string `json:"selectRange"`
-	GroupName       string `json:"groupName"`
-	NamesRow        int    `json:"namesRow"`
-	SpreadsheetID   string `json:"spreadsheetID"`
-	DatesCol        string `json:"datesCol"`
-	KeepWhenMissing bool   `json:"keepWhenMissing"`
-	NotifyUsers     bool   `json:"notifyUsers"`
-	NotifyChannel   string `json:"notifyChannel"`
-	AssignCharacter string `json:"assignCharacter"`
+	SelectRange     string             `json:"selectRange"`
+	GroupName       string             `json:"groupName"`
+	NamesRow        int                `json:"namesRow"`
+	GroupsRow       int                `json:"groupsRow"`
+	SpreadsheetID   string             `json:"spreadsheetID"`
+	DatesCol        string             `json:"datesCol"`
+	KeepWhenMissing bool               `json:"keepWhenMissing"`
+	NotifyUsers     bool               `json:"notifyUsers"`
+	NotifyChannel   string             `json:"notifyChannel"`
+	AssignCharacter string             `json:"assignCharacter"`
+	PagerDuty       []*PagerDutyConfig `json:"pagerDuty"`
 	namesRowNum     int
+	groupsRowNum    int
 	datesColNum     int
 	rowOffset       int
 	colOffset       int
@@ -44,21 +74,25 @@ type RuntimeContext struct {
 	GoogleCredentialsJSON interface{}         `json:"googleCredentialsJson"`
 	SlackBotAPIKey        string              `json:"slackBotAPIKey"`
 	SlackAccessAPIKey     string              `json:"slackAccessAPIKey"`
+	PagerDutyToken        string              `json:"pagerDutyToken"`
 
-	slack        *slack.Client
-	slackP       *slack.Client
-	sheets       *sheets.Service
-	groups       UserGroupList
-	users        UserList
-	channels     ChannelList
-	io           IOStrategy
-	usersMatcher *closestmatch.ClosestMatch
+	slack          *slack.Client
+	slackP         *slack.Client
+	sheets         *sheets.Service
+	groups         UserGroupList
+	users          UserList
+	pdUsers        PDUserList
+	channels       ChannelList
+	io             IOStrategy
+	usersMatcher   *closestmatch.ClosestMatch
+	pdUsersMatcher *closestmatch.ClosestMatch
+	pagerduty      *pagerduty.Client
 }
 
 // AssignmentsScheduleEntry  -
 type AssignmentsScheduleEntry struct {
 	Date  time.Time
-	Names []string
+	Names []NameGroup
 }
 
 // UserGroupList .
@@ -69,6 +103,9 @@ type UserList []slack.User
 
 // ChannelList .
 type ChannelList []slack.Channel
+
+// PDUserList .
+type PDUserList []pagerduty.User
 
 // CliIOStrategy -
 type CliIOStrategy struct{}

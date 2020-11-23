@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PagerDuty/go-pagerduty"
 	"github.com/go-errors/errors"
 	"github.com/schollz/closestmatch"
 	"github.com/slack-go/slack"
@@ -101,6 +102,16 @@ func matchUserToName(ctx *RuntimeContext, name string) *slack.User {
 	return nil
 }
 
+func matchPDUserToName(ctx *RuntimeContext, name string) *pagerduty.User {
+	match := ctx.pdUsersMatcher.Closest(name)
+	for _, user := range ctx.pdUsers {
+		if user.Name == match {
+			return &user
+		}
+	}
+	return nil
+}
+
 func matchChannelToName(ctx *RuntimeContext, name string) *slack.Channel {
 	for _, channel := range ctx.channels {
 		if channel.Name == name {
@@ -110,95 +121,69 @@ func matchChannelToName(ctx *RuntimeContext, name string) *slack.Channel {
 	return nil
 }
 
-// VerifyNames -
-func VerifyNames(ctx *RuntimeContext) {
-	for _, cfg := range ctx.Configs {
-		fmt.Println("Verifying names for", cfg.GroupName)
-		names, err := getAllNames(ctx, &cfg)
-		if err != nil {
-			log.Println(Stack(err))
-			log.Println("Unable to load names for", cfg.GroupName)
-			continue
-		}
-		good := 0
-		bad := 0
-		for _, nameAndPos := range names {
-			user := matchUserToName(ctx, nameAndPos.name)
-			if user == nil {
-				fmt.Printf("[%s:%d] %s -> unable to match!\n",
-					colNoToName(nameAndPos.col),
-					nameAndPos.row,
-					nameAndPos.name,
-				)
-				bad++
-			} else {
-				fmt.Printf("[%s:%d] %s -> %s (@%s)\n",
-					colNoToName(nameAndPos.col),
-					nameAndPos.row,
-					nameAndPos.name,
-					user.RealName,
-					user.Name,
-				)
-				good++
-			}
-		}
-		fmt.Println(good, "matches,", bad, "missing")
-	}
-}
-
 // CreateContext -
-func CreateContext(fileName string, io IOStrategy) (*RuntimeContext, error) {
+func CreateContext(fileName string, io IOStrategy) *RuntimeContext {
 	var runtimeContext RuntimeContext
 	runtimeContext.io = io
 	configFile, err := io.LoadBytes(fileName)
 	if err != nil {
-		return nil, errors.Wrap(err, 0)
+		log.Fatalln(Stack(errors.Wrap(err, 0)))
 	}
 
 	err = json.Unmarshal(configFile, &runtimeContext)
 	if err != nil {
-		return nil, errors.Wrap(err, 0)
+		log.Fatalln(Stack(errors.Wrap(err, 0)))
 	}
 
 	for n, cfg := range runtimeContext.Configs {
 		ranges := strings.Split(cfg.SelectRange, ":")
 		startRangeCol, startRangeRow := nameToColRow(ranges[0])
 		runtimeContext.Configs[n].namesRowNum = cfg.NamesRow - startRangeRow
+		runtimeContext.Configs[n].groupsRowNum = cfg.GroupsRow - startRangeRow
 		runtimeContext.Configs[n].datesColNum = nameToColNo(cfg.DatesCol) - startRangeCol
 		runtimeContext.Configs[n].colOffset = startRangeCol
 		runtimeContext.Configs[n].rowOffset = startRangeRow
 	}
+	return &runtimeContext
+}
 
-	runtimeContext.sheets, err = getSheets(&runtimeContext)
+// LoadSheets -
+func LoadSheets(ctx *RuntimeContext) {
+	var err error
+	ctx.sheets, err = getSheets(ctx)
 	if err != nil {
-		return nil, err
+		log.Fatalln(Stack(errors.Wrap(err, 0)))
+	}
+}
+
+// LoadSlack -
+func LoadSlack(ctx *RuntimeContext) {
+	var err error
+	ctx.slack = slack.New(ctx.SlackBotAPIKey, slack.OptionDebug(false))
+	ctx.slackP = slack.New(ctx.SlackAccessAPIKey, slack.OptionDebug(false))
+
+	ctx.groups, err = ctx.slack.GetUserGroups()
+	if err != nil {
+		log.Fatalln(Stack(errors.Wrap(err, 0)))
 	}
 
-	runtimeContext.slack = slack.New(runtimeContext.SlackBotAPIKey, slack.OptionDebug(false))
-	runtimeContext.slackP = slack.New(runtimeContext.SlackAccessAPIKey, slack.OptionDebug(false))
-
-	runtimeContext.groups, err = runtimeContext.slack.GetUserGroups()
+	ctx.users, err = ctx.slack.GetUsers()
 	if err != nil {
-		return nil, errors.Wrap(err, 0)
+		log.Fatalln(Stack(errors.Wrap(err, 0)))
 	}
 
-	runtimeContext.users, err = runtimeContext.slack.GetUsers()
-	if err != nil {
-		return nil, errors.Wrap(err, 0)
-	}
-
-	runtimeContext.channels = make([]slack.Channel, 0)
+	ctx.channels = make([]slack.Channel, 0)
 	channelsCursor := ""
 	for {
-		channels, nextCursor, err := runtimeContext.slack.GetConversations(&slack.GetConversationsParameters{
+		channels, nextCursor, err := ctx.slack.GetConversations(&slack.GetConversationsParameters{
 			Cursor:          channelsCursor,
 			ExcludeArchived: "true",
 			Types:           []string{"public_channel", "private_channel"},
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, 0)
+			log.Fatalln(Stack(errors.Wrap(err, 0)))
 		}
-		runtimeContext.channels = append(runtimeContext.channels, channels...)
+		ctx.channels = append(ctx.channels, channels...)
 		if nextCursor != "" {
 			channelsCursor = nextCursor
 		} else {
@@ -206,11 +191,29 @@ func CreateContext(fileName string, io IOStrategy) (*RuntimeContext, error) {
 		}
 	}
 
-	userNames := make([]string, len(runtimeContext.users))
-	for i, user := range runtimeContext.users {
+	userNames := make([]string, len(ctx.users))
+	for i, user := range ctx.users {
 		userNames[i] = user.RealName
 	}
-	runtimeContext.usersMatcher = closestmatch.New(userNames, []int{2, 3, 4, 5, 6})
+	ctx.usersMatcher = closestmatch.New(userNames, []int{2, 3, 4, 5, 6})
+}
 
-	return &runtimeContext, nil
+// LoadPagerduty -
+func LoadPagerduty(ctx *RuntimeContext) {
+	ctx.pagerduty = pagerduty.NewClient(ctx.PagerDutyToken)
+
+	var opts pagerduty.ListUsersOptions
+	opts.Total = 1
+	opts.Limit = 1000
+	users, err := ctx.pagerduty.ListUsers(opts)
+	if err != nil {
+		log.Fatalln(Stack(errors.Wrap(err, 0)))
+	}
+	ctx.pdUsers = users.Users
+
+	userNames := make([]string, len(ctx.pdUsers))
+	for i, user := range ctx.pdUsers {
+		userNames[i] = user.Name
+	}
+	ctx.pdUsersMatcher = closestmatch.New(userNames, []int{2, 3, 4, 5, 6})
 }

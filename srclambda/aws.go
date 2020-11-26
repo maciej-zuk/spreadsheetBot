@@ -33,7 +33,7 @@ func (a *SSMIOStrategy) Load(name string) (string, error) {
 }
 
 // Save -
-func (a *SSMIOStrategy) Save(name string, value string) error {
+func (a *SSMIOStrategy) Save(name, value string) error {
 	name = a.KeyPrefix + name
 	t := true
 	_, err := ssmc.PutParameter(&ssm.PutParameterInput{

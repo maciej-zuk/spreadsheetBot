@@ -47,9 +47,9 @@ func nameToColNo(name string) int {
 	return n
 }
 
-func nameToColRow(name string) (int, int) {
-	col := 0
-	row := 0
+func nameToColRow(name string) (col, row int) {
+	col = 0
+	row = 0
 	offset := 0
 	for i, c := range name {
 		if c >= 'A' && c <= 'Z' {
@@ -60,7 +60,7 @@ func nameToColRow(name string) (int, int) {
 		}
 	}
 	fmt.Sscanf(name[offset:], "%d", &row)
-	return col, row
+	return
 }
 
 func serialNumberToTime(sn float64) time.Time {
@@ -84,9 +84,9 @@ func cleanUpName(name string) string {
 }
 
 func matchGroupToName(ctx *RuntimeContext, name string) *slack.UserGroup {
-	for _, group := range ctx.groups {
-		if group.Handle == name {
-			return &group
+	for n := range ctx.groups {
+		if ctx.groups[n].Handle == name {
+			return &ctx.groups[n]
 		}
 	}
 	return nil
@@ -94,9 +94,9 @@ func matchGroupToName(ctx *RuntimeContext, name string) *slack.UserGroup {
 
 func matchUserToName(ctx *RuntimeContext, name string) *slack.User {
 	match := ctx.usersMatcher.Closest(name)
-	for _, user := range ctx.users {
-		if user.RealName == match {
-			return &user
+	for n := range ctx.users {
+		if ctx.users[n].RealName == match {
+			return &ctx.users[n]
 		}
 	}
 	return nil
@@ -104,18 +104,18 @@ func matchUserToName(ctx *RuntimeContext, name string) *slack.User {
 
 func matchPDUserToName(ctx *RuntimeContext, name string) *pagerduty.User {
 	match := ctx.pdUsersMatcher.Closest(name)
-	for _, user := range ctx.pdUsers {
-		if user.Name == match {
-			return &user
+	for n := range ctx.pdUsers {
+		if ctx.pdUsers[n].Name == match {
+			return &ctx.pdUsers[n]
 		}
 	}
 	return nil
 }
 
 func matchChannelToName(ctx *RuntimeContext, name string) *slack.Channel {
-	for _, channel := range ctx.channels {
-		if channel.Name == name {
-			return &channel
+	for n := range ctx.channels {
+		if ctx.channels[n].Name == name {
+			return &ctx.channels[n]
 		}
 	}
 	return nil
@@ -192,8 +192,8 @@ func LoadSlack(ctx *RuntimeContext) {
 	}
 
 	userNames := make([]string, len(ctx.users))
-	for i, user := range ctx.users {
-		userNames[i] = user.RealName
+	for i := range ctx.users {
+		userNames[i] = ctx.users[i].RealName
 	}
 	ctx.usersMatcher = closestmatch.New(userNames, []int{2, 3, 4, 5, 6})
 }
@@ -212,8 +212,8 @@ func LoadPagerduty(ctx *RuntimeContext) {
 	ctx.pdUsers = users.Users
 
 	userNames := make([]string, len(ctx.pdUsers))
-	for i, user := range ctx.pdUsers {
-		userNames[i] = user.Name
+	for i := range ctx.pdUsers {
+		userNames[i] = ctx.pdUsers[i].Name
 	}
 	ctx.pdUsersMatcher = closestmatch.New(userNames, []int{2, 3, 4, 5, 6})
 }

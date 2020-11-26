@@ -72,7 +72,7 @@ func contextBlockFor(text1, text2 string) slack.Block {
 func VerifySlackNames(ctx *RuntimeContext) {
 	for _, cfg := range ctx.Configs {
 		fmt.Println("Verifying names for", cfg.GroupName)
-		names, err := getAllNames(ctx, &cfg)
+		names, err := getAllNames(ctx, cfg)
 		if err != nil {
 			log.Println(Stack(err))
 			log.Println("Unable to load names for", cfg.GroupName)

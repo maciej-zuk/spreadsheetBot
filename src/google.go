@@ -29,7 +29,11 @@ func getSheets(ctx *RuntimeContext) (*sheets.Service, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, 0)
 		}
-		srvc, err = sheets.New(getClient(ctx, config))
+		client, err := getClient(ctx, config)
+		if err != nil {
+			return nil, errors.Wrap(err, 0)
+		}
+		srvc, err = sheets.NewService(context.Background(), option.WithHTTPClient(client))
 		if err != nil {
 			return nil, errors.Wrap(err, 0)
 		}
@@ -37,20 +41,26 @@ func getSheets(ctx *RuntimeContext) (*sheets.Service, error) {
 	return srvc, nil
 }
 
-func getClient(ctx *RuntimeContext, config *oauth2.Config) *http.Client {
+func getClient(ctx *RuntimeContext, config *oauth2.Config) (*http.Client, error) {
 	var token *oauth2.Token
 	token, err := tokenFromFile(ctx)
 	if err != nil {
 		token = getTokenFromWeb(ctx, config)
-		saveToken(ctx, token)
+		err = saveToken(ctx, token)
+		if err != nil {
+			return nil, err
+		}
 	}
-	tokenSource := config.TokenSource(oauth2.NoContext, token)
-	client := oauth2.NewClient(oauth2.NoContext, tokenSource)
+	tokenSource := config.TokenSource(context.Background(), token)
+	client := oauth2.NewClient(context.Background(), tokenSource)
 	newToken, err := tokenSource.Token()
 	if err == nil {
-		saveToken(ctx, newToken)
+		err = saveToken(ctx, newToken)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return client
+	return client, err
 }
 
 // Request a token from the web, then returns the retrieved token.
@@ -85,9 +95,10 @@ func tokenFromFile(ctx *RuntimeContext) (*oauth2.Token, error) {
 }
 
 // Saves a token to a file path.
-func saveToken(ctx *RuntimeContext, token *oauth2.Token) {
+func saveToken(ctx *RuntimeContext, token *oauth2.Token) error {
 	b, err := json.Marshal(token)
 	if err == nil {
-		ctx.io.SaveBytes("token", b)
+		err = ctx.io.SaveBytes("token", b)
 	}
+	return err
 }

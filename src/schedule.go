@@ -98,9 +98,9 @@ func getScheduleForDateAsSlackBlocks(
 }
 
 // PrintScheduleForDateRange  -
-func PrintScheduleForDateRange(ctx *RuntimeContext, startDate time.Time, endDate time.Time, title string) {
+func PrintScheduleForDateRange(ctx *RuntimeContext, startDate, endDate time.Time, title string) {
 	for _, cfg := range ctx.Configs {
-		s, err := getScheduleForDate(ctx, &cfg, startDate, endDate, title)
+		s, err := getScheduleForDate(ctx, cfg, startDate, endDate, title)
 		if err == nil {
 			fmt.Print(s)
 		} else {
@@ -111,7 +111,7 @@ func PrintScheduleForDateRange(ctx *RuntimeContext, startDate time.Time, endDate
 }
 
 // NotifySlackOfScheduleForDateRange  -
-func NotifySlackOfScheduleForDateRange(ctx *RuntimeContext, startDate time.Time, endDate time.Time, title string) {
+func NotifySlackOfScheduleForDateRange(ctx *RuntimeContext, startDate, endDate time.Time, title string) {
 	for _, cfg := range ctx.Configs {
 		var channelID string
 		if channel := matchChannelToName(ctx, cfg.NotifyChannel); channel != nil {
@@ -120,7 +120,7 @@ func NotifySlackOfScheduleForDateRange(ctx *RuntimeContext, startDate time.Time,
 			log.Println("Skipping missing or nonexisting channel for group", cfg.GroupName)
 			continue
 		}
-		blocks, err := getScheduleForDateAsSlackBlocks(ctx, &cfg, startDate, endDate, title)
+		blocks, err := getScheduleForDateAsSlackBlocks(ctx, cfg, startDate, endDate, title)
 		if err != nil {
 			log.Println("Unable to notify Slack about schedule for group", cfg.GroupName)
 		}

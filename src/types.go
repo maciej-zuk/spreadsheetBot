@@ -23,14 +23,14 @@ type IOStrategy interface {
 
 // PagerDutySlotAssignment -
 type PagerDutySlotAssignment struct {
-	DayOfWeek uint
 	User      string
 	StartUtc  string
+	DayOfWeek uint
 }
 
 // PagerDutyTierAssignment -
 type PagerDutyTierAssignment struct {
-	Assignments []PagerDutySlotAssignment
+	Assignments []*PagerDutySlotAssignment
 	Group       string
 }
 
@@ -49,32 +49,32 @@ type PagerDutyConfig struct {
 
 // AssignmentsConfig -
 type AssignmentsConfig struct {
+	PagerDuty       []*PagerDutyConfig `json:"pagerDuty"`
 	SelectRange     string             `json:"selectRange"`
 	GroupName       string             `json:"groupName"`
-	NamesRow        int                `json:"namesRow"`
-	GroupsRow       int                `json:"groupsRow"`
 	SpreadsheetID   string             `json:"spreadsheetID"`
 	DatesCol        string             `json:"datesCol"`
-	KeepWhenMissing bool               `json:"keepWhenMissing"`
-	NotifyUsers     bool               `json:"notifyUsers"`
 	NotifyChannel   string             `json:"notifyChannel"`
 	AssignCharacter string             `json:"assignCharacter"`
-	PagerDuty       []*PagerDutyConfig `json:"pagerDuty"`
+	NamesRow        int                `json:"namesRow"`
+	GroupsRow       int                `json:"groupsRow"`
 	namesRowNum     int
 	groupsRowNum    int
 	datesColNum     int
 	rowOffset       int
 	colOffset       int
+	KeepWhenMissing bool `json:"keepWhenMissing"`
+	NotifyUsers     bool `json:"notifyUsers"`
 }
 
 // RuntimeContext -
 type RuntimeContext struct {
-	Configs               []AssignmentsConfig `json:"configs"`
-	GoogleAPIKey          string              `json:"googleAPIKey"`
-	GoogleCredentialsJSON interface{}         `json:"googleCredentialsJson"`
-	SlackBotAPIKey        string              `json:"slackBotAPIKey"`
-	SlackAccessAPIKey     string              `json:"slackAccessAPIKey"`
-	PagerDutyToken        string              `json:"pagerDutyToken"`
+	Configs               []*AssignmentsConfig `json:"configs"`
+	GoogleCredentialsJSON interface{}          `json:"googleCredentialsJson"`
+	GoogleAPIKey          string               `json:"googleAPIKey"`
+	SlackBotAPIKey        string               `json:"slackBotAPIKey"`
+	SlackAccessAPIKey     string               `json:"slackAccessAPIKey"`
+	PagerDutyToken        string               `json:"pagerDutyToken"`
 
 	slack          *slack.Client
 	slackP         *slack.Client
@@ -138,7 +138,7 @@ func (a *CliIOStrategy) Load(name string) (string, error) {
 }
 
 // Save -
-func (a *CliIOStrategy) Save(name string, value string) error {
+func (a *CliIOStrategy) Save(name, value string) error {
 	return a.SaveBytes(name, []byte(value))
 }
 

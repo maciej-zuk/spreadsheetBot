@@ -23,7 +23,7 @@ func VerifyPagerDutyNames(ctx *RuntimeContext) {
 		}
 
 		fmt.Println("Verifying names for", cfg.GroupName)
-		names, err := getAllNames(ctx, &cfg)
+		names, err := getAllNames(ctx, cfg)
 		if err != nil {
 			log.Println(Stack(err))
 			log.Println("Unable to load names for", cfg.GroupName)
@@ -67,7 +67,7 @@ func VerifyPagerDutyNames(ctx *RuntimeContext) {
 }
 
 // PagerDutyAssignTiers -
-func PagerDutyAssignTiers(ctx *RuntimeContext, startDate time.Time, endDate time.Time) {
+func PagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) {
 	err := pagerDutyAssignTiers(ctx, startDate, endDate)
 	if err != nil {
 		log.Fatalln(Stack(err))
@@ -83,7 +83,7 @@ func contains(s []string, e string) bool {
 	return false
 }
 
-func pagerDutyAssignTiers(ctx *RuntimeContext, startDate time.Time, endDate time.Time) error {
+func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) error {
 	s1 := rand.NewSource(time.Now().UnixNano())
 	r1 := rand.New(s1)
 
@@ -97,7 +97,7 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate time.Time, endDate time
 			tierIDs := pd.TierIDs
 
 			// get schedule
-			schedule, err := getDailyAssignmentScheduleForDateRange(ctx, &cfg, startDate, endDate)
+			schedule, err := getDailyAssignmentScheduleForDateRange(ctx, cfg, startDate, endDate)
 			if err != nil {
 				return errors.Wrap(err, 0)
 			}
@@ -126,7 +126,13 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate time.Time, endDate time
 
 			// verify max slots per day > tier capacity - fatal
 			if len(tierIDs)*5 < maxPerDay {
-				return errors.Errorf("Schedule for policy id='%s' has up to %d people per day but it contains only %d tiers, %d tiers is required", policyID, maxPerDay, len(tierIDs), 1+maxPerDay/5)
+				return errors.Errorf(
+					"Schedule for policy id='%s' has up to %d people per day but it contains only %d tiers, %d tiers is required",
+					policyID,
+					maxPerDay,
+					len(tierIDs),
+					1+maxPerDay/5,
+				)
 			}
 
 			// extend max slot so all tiers are covered
@@ -180,7 +186,7 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate time.Time, endDate time
 						continue
 					}
 					// create assignment
-					assignment := PagerDutySlotAssignment{
+					assignment := &PagerDutySlotAssignment{
 						DayOfWeek: dayOfWeek,
 						User:      fmt.Sprintf("%s|%s -> %s", match.APIObject.ID, nameGroup.Name, match.Name),
 						StartUtc:  "15:00:00",
@@ -243,20 +249,21 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate time.Time, endDate time
 			for i := 0; i < len(tierAssignments); i++ {
 				hadEmptyTier = false
 				for n, s := range tierAssignments {
-					if len(s) == 0 {
-						hadEmptyTier = true
-						maxLen := 0
-						maxSliceIndex := 0
-						for m, s2 := range tierAssignments {
-							if len(s2) > maxLen {
-								maxLen = len(s2)
-								maxSliceIndex = m
-							}
-						}
-						tierAssignments[n] = append(tierAssignments[n], tierAssignments[maxSliceIndex][maxLen-1])
-						tierAssignments[maxSliceIndex] = tierAssignments[maxSliceIndex][:maxLen-1]
-						break
+					if len(s) != 0 {
+						continue
 					}
+					hadEmptyTier = true
+					maxLen := 0
+					maxSliceIndex := 0
+					for m, s2 := range tierAssignments {
+						if len(s2) > maxLen {
+							maxLen = len(s2)
+							maxSliceIndex = m
+						}
+					}
+					tierAssignments[n] = append(tierAssignments[n], tierAssignments[maxSliceIndex][maxLen-1])
+					tierAssignments[maxSliceIndex] = tierAssignments[maxSliceIndex][:maxLen-1]
+					break
 				}
 
 				if !hadEmptyTier {
@@ -301,8 +308,8 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate time.Time, endDate time
 			}
 
 			// remove old schedules
-			for _, s := range oldSchedules {
-				ctx.pagerduty.DeleteSchedule(s.ID)
+			for n := range oldSchedules {
+				ctx.pagerduty.DeleteSchedule(oldSchedules[n].ID)
 			}
 		}
 	}
@@ -319,14 +326,14 @@ func clearAutoSchedules(ctx *RuntimeContext, policy *pagerduty.EscalationPolicy)
 		return nil, err
 	}
 
-	for _, s := range scheds.Schedules {
-		deleteScheduleFromPolicy(ctx, policy, s.ID)
+	for n := range scheds.Schedules {
+		deleteScheduleFromPolicy(policy, scheds.Schedules[n].ID)
 	}
 
 	return scheds.Schedules, nil
 }
 
-func deleteScheduleFromPolicy(ctx *RuntimeContext, policy *pagerduty.EscalationPolicy, scheduleID string) {
+func deleteScheduleFromPolicy(policy *pagerduty.EscalationPolicy, scheduleID string) {
 	for n, rule := range policy.EscalationRules {
 		outTargets := make([]pagerduty.APIObject, 0, len(rule.Targets))
 		for _, target := range rule.Targets {
@@ -384,7 +391,7 @@ func fillTier(
 func createSlot(
 	ctx *RuntimeContext,
 	group string,
-	assignments []PagerDutySlotAssignment,
+	assignments []*PagerDutySlotAssignment,
 	startDate time.Time,
 	endDate time.Time,
 ) (*pagerduty.Schedule, error) {

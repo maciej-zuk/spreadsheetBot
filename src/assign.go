@@ -8,7 +8,7 @@ import (
 // PerformAssign  -
 func PerformAssign(ctx *RuntimeContext, date time.Time) {
 	for _, cfg := range ctx.Configs {
-		names, err := getCurrentAssignment(ctx, &cfg, date)
+		names, err := getCurrentAssignment(ctx, cfg, date)
 		if err != nil {
 			log.Println("Error while loading assigned people from spreadsheet for group", cfg.GroupName, ":", err)
 			log.Println(Stack(err))
@@ -22,7 +22,7 @@ func PerformAssign(ctx *RuntimeContext, date time.Time) {
 				log.Println("Warn: No assignment for group", cfg.GroupName)
 			}
 		}
-		err = assignUsersToUserGroups(ctx, names, &cfg)
+		err = assignUsersToUserGroups(ctx, names, cfg)
 		if err != nil {
 			log.Println("Error while assigning user group", cfg.GroupName, ":", err)
 			log.Println(Stack(err))

@@ -1,10 +1,12 @@
 package src
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"math"
 	"math/rand"
+	"os"
 	"strings"
 	"time"
 
@@ -92,9 +94,15 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) err
 			continue
 		}
 		for _, pd := range cfg.PagerDuty {
+			// load phase
 			policyID := pd.PolicyID
 			filterGroups := pd.Groups
 			tierIDs := pd.TierIDs
+			prefix := pd.Prefix
+
+			if ctx.Verbose {
+				fmt.Printf("Processing policy ID='%s' for group '%s'.\n", policyID, cfg.GroupName)
+			}
 
 			// get schedule
 			schedule, err := getDailyAssignmentScheduleForDateRange(ctx, cfg, startDate, endDate)
@@ -232,10 +240,6 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) err
 				}
 			}
 
-			for _, group := range groups {
-				fmt.Println(assignments[group])
-			}
-
 			// distribute assignments across tiers
 			tierAssignments := make([][]*PagerDutyTierAssignment, len(tierIDs))
 			hadEmptyTier := false
@@ -275,9 +279,6 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) err
 				return errors.Errorf("Unable to distribute assignments for policy id='%s'", policyID)
 			}
 
-			// fmt.Println(tierAssignments)
-			// continue
-
 			// get policy
 			var opts pagerduty.GetEscalationPolicyOptions
 			policy, err := ctx.pagerduty.GetEscalationPolicy(policyID, &opts)
@@ -287,11 +288,55 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) err
 			}
 
 			// clear old schedules from policy
-			oldSchedules, err := clearAutoSchedules(ctx, policy)
+			oldSchedules, err := clearAutoSchedules(ctx, policy, prefix)
 
 			if err != nil {
 				return err
 			}
+
+			for _, group := range groups {
+				assignments[group].SlotName = fmt.Sprintf("Slot_%s_%s%s_%06X", policy.Name, prefix, group, r1.Intn(1<<24))
+			}
+
+			if ctx.Verbose {
+				fmt.Printf("Fetched policy '%s' and will perform following actions:\n", policy.Name)
+
+				for n, tierID := range tierIDs {
+					for m := range tierAssignments[n] {
+						fmt.Printf(
+							"- create schedule '%s' with %d layer(s) for group '%s' for rule ID='%s', with following user(s):\n",
+							tierAssignments[n][m].SlotName,
+							len(tierAssignments[n][m].Assignments),
+							tierAssignments[n][m].Group,
+							tierID,
+						)
+						for l := range tierAssignments[n][m].Assignments {
+							fmt.Printf(
+								"\t- layer '%s': \t%s\n",
+								daysOfWeek[tierAssignments[n][m].Assignments[l].DayOfWeek],
+								tierAssignments[n][m].Assignments[l].User,
+							)
+						}
+					}
+					fmt.Printf("- this will result in total %d schedule(s) per rule ID='%s'\n", len(tierAssignments[n]), tierID)
+				}
+
+				for n := range oldSchedules {
+					fmt.Printf("- attempt to unassign and delete old schedule: %s (ID: '%s')\n", oldSchedules[n].Name, oldSchedules[n].ID)
+				}
+
+				fmt.Printf("Proceed? [y/N] ")
+
+				reader := bufio.NewReader(os.Stdin)
+				input, err := reader.ReadString('\n')
+				if err != nil || len(input) < 1 || input[0] != 'y' {
+					fmt.Println("Aborting.")
+					continue
+				}
+				fmt.Println("Proceeding")
+			}
+
+			// execution phase
 
 			// create new schedules
 			for n, tierID := range tierIDs {
@@ -311,15 +356,19 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) err
 			for n := range oldSchedules {
 				ctx.pagerduty.DeleteSchedule(oldSchedules[n].ID)
 			}
+
+			if ctx.Verbose {
+				fmt.Println("Policy updated")
+			}
 		}
 	}
 
 	return nil
 }
 
-func clearAutoSchedules(ctx *RuntimeContext, policy *pagerduty.EscalationPolicy) ([]pagerduty.Schedule, error) {
+func clearAutoSchedules(ctx *RuntimeContext, policy *pagerduty.EscalationPolicy, prefix string) ([]pagerduty.Schedule, error) {
 	var listOpts pagerduty.ListSchedulesOptions
-	listOpts.Query = fmt.Sprintf("Slot_%s_", policy.Name)
+	listOpts.Query = fmt.Sprintf("Slot_%s_%s", policy.Name, prefix)
 	scheds, err := ctx.pagerduty.ListSchedules(listOpts)
 
 	if err != nil {
@@ -354,9 +403,6 @@ func fillTier(
 	startDate time.Time,
 	endDate time.Time,
 ) error {
-	s1 := rand.NewSource(time.Now().UnixNano())
-	r1 := rand.New(s1)
-
 	var ruleNo = -1
 	for n, rule := range policy.EscalationRules {
 		if rule.ID == ruleID {
@@ -372,7 +418,7 @@ func fillTier(
 	for n, a := range assignments {
 		schedule, err := createSlot(
 			ctx,
-			fmt.Sprintf("%s_%s_%X", policy.Name, a.Group, r1.Intn(1<<16)),
+			a.SlotName,
 			a.Assignments,
 			startDate,
 			endDate,
@@ -390,13 +436,13 @@ func fillTier(
 
 func createSlot(
 	ctx *RuntimeContext,
-	group string,
+	slotName string,
 	assignments []*PagerDutySlotAssignment,
 	startDate time.Time,
 	endDate time.Time,
 ) (*pagerduty.Schedule, error) {
 	var schedule pagerduty.Schedule
-	schedule.Name = fmt.Sprintf("Slot_%s", group)
+	schedule.Name = slotName
 	schedule.TimeZone = "UTC"
 
 	schedule.ScheduleLayers = make([]pagerduty.ScheduleLayer, len(assignments))

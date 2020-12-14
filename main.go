@@ -24,9 +24,12 @@ func main() {
 	verifySlackNames := flag.Bool("verifySlackNames", false, "verify Slack <-> spreadsheet names")
 	verifyPagerDutyNames := flag.Bool("verifyPagerDutyNames", false, "verify PagerDuty <-> spreadsheet names")
 
+	verbose := flag.Bool("verbose", true, "increase output verbosity")
+
 	flag.Parse()
 	io := spbot.CliIOStrategy{}
 	ctx := spbot.CreateContext(*configFile, &io)
+	ctx.Verbose = *verbose
 
 	var (
 		startDate time.Time

@@ -32,6 +32,7 @@ type PagerDutySlotAssignment struct {
 type PagerDutyTierAssignment struct {
 	Assignments []*PagerDutySlotAssignment
 	Group       string
+	SlotName    string
 }
 
 // NameGroup -
@@ -42,6 +43,7 @@ type NameGroup struct {
 
 // PagerDutyConfig -
 type PagerDutyConfig struct {
+	Prefix   string   `json:"prefix"`
 	PolicyID string   `json:"policyID"`
 	Groups   []string `json:"groups"`
 	TierIDs  []string `json:"tierIDs"`
@@ -75,6 +77,7 @@ type RuntimeContext struct {
 	SlackBotAPIKey        string               `json:"slackBotAPIKey"`
 	SlackAccessAPIKey     string               `json:"slackAccessAPIKey"`
 	PagerDutyToken        string               `json:"pagerDutyToken"`
+	Verbose               bool
 
 	slack          *slack.Client
 	slackP         *slack.Client

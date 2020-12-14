@@ -125,6 +125,7 @@ func matchChannelToName(ctx *RuntimeContext, name string) *slack.Channel {
 func CreateContext(fileName string, io IOStrategy) *RuntimeContext {
 	var runtimeContext RuntimeContext
 	runtimeContext.io = io
+	runtimeContext.Verbose = false
 	configFile, err := io.LoadBytes(fileName)
 	if err != nil {
 		log.Fatalln(Stack(errors.Wrap(err, 0)))
@@ -136,7 +137,13 @@ func CreateContext(fileName string, io IOStrategy) *RuntimeContext {
 	}
 
 	for n, cfg := range runtimeContext.Configs {
-		ranges := strings.Split(cfg.SelectRange, ":")
+		var ranges []string
+		if strings.Contains(cfg.SelectRange, "!") {
+			actualRange := strings.Split(cfg.SelectRange, "!")[1]
+			ranges = strings.Split(actualRange, ":")
+		} else {
+			ranges = strings.Split(cfg.SelectRange, ":")
+		}
 		startRangeCol, startRangeRow := nameToColRow(ranges[0])
 		runtimeContext.Configs[n].namesRowNum = cfg.NamesRow - startRangeRow
 		runtimeContext.Configs[n].groupsRowNum = cfg.GroupsRow - startRangeRow

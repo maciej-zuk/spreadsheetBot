@@ -66,7 +66,30 @@ func getCurrentAssignment(ctx *RuntimeContext, cfg *AssignmentsConfig, date time
 	if err != nil {
 		return nil, errors.Wrap(err, 0)
 	}
-	return getNamesForDate(cfg, result, date)
+	names, err := getNamesForDate(cfg, result, date)
+	if err != nil {
+		return nil, err
+	}
+	if ctx.Overlap {
+		overlapDate := date.AddDate(0, 0, 1)
+		if overlapDate.Weekday() == time.Saturday {
+			overlapDate = overlapDate.AddDate(0, 0, 2)
+		}
+		overlapNames, err := getNamesForDate(cfg, result, overlapDate)
+		if err != nil {
+			return nil, err
+		}
+		uniqueMap := make(map[string]bool)
+		for n := range names {
+			uniqueMap[names[n].Name] = true
+		}
+		for n := range overlapNames {
+			if _, ok := uniqueMap[overlapNames[n].Name]; !ok {
+				names = append(names, overlapNames[n])
+			}
+		}
+	}
+	return names, err
 }
 
 func getDailyAssignmentScheduleForDateRange(
@@ -84,6 +107,25 @@ func getDailyAssignmentScheduleForDateRange(
 		names, err := getNamesForDate(cfg, result, dayDate)
 		if err != nil {
 			return nil, err
+		}
+		if ctx.Overlap {
+			overlapDate := dayDate.AddDate(0, 0, 1)
+			if overlapDate.Weekday() == time.Saturday {
+				overlapDate = overlapDate.AddDate(0, 0, 2)
+			}
+			overlapNames, err := getNamesForDate(cfg, result, overlapDate)
+			if err != nil {
+				return nil, err
+			}
+			uniqueMap := make(map[string]bool)
+			for n := range names {
+				uniqueMap[names[n].Name] = true
+			}
+			for n := range overlapNames {
+				if _, ok := uniqueMap[overlapNames[n].Name]; !ok {
+					names = append(names, overlapNames[n])
+				}
+			}
 		}
 		schedule = append(schedule, AssignmentsScheduleEntry{
 			Date:  dayDate,

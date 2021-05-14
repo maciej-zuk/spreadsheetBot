@@ -77,7 +77,9 @@ type RuntimeContext struct {
 	SlackBotAPIKey        string               `json:"slackBotAPIKey"`
 	SlackAccessAPIKey     string               `json:"slackAccessAPIKey"`
 	PagerDutyToken        string               `json:"pagerDutyToken"`
+	FilterGroups          string
 	Verbose               bool
+	Overlap               bool
 
 	slack          *slack.Client
 	slackP         *slack.Client

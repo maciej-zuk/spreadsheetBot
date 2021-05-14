@@ -2,12 +2,17 @@ package src
 
 import (
 	"log"
+	"strings"
 	"time"
 )
 
 // PerformAssign  -
 func PerformAssign(ctx *RuntimeContext, date time.Time) {
 	for _, cfg := range ctx.Configs {
+		if len(ctx.FilterGroups) > 0 && !strings.Contains(ctx.FilterGroups, cfg.GroupName) {
+			continue
+		}
+
 		names, err := getCurrentAssignment(ctx, cfg, date)
 		if err != nil {
 			log.Println("Error while loading assigned people from spreadsheet for group", cfg.GroupName, ":", err)

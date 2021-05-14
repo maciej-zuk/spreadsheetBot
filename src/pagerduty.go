@@ -72,7 +72,7 @@ func VerifyPagerDutyNames(ctx *RuntimeContext) {
 func PagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) {
 	err := pagerDutyAssignTiers(ctx, startDate, endDate)
 	if err != nil {
-		log.Fatalln(Stack(err))
+		log.Println(Stack(err))
 	}
 }
 
@@ -100,9 +100,7 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) err
 			tierIDs := pd.TierIDs
 			prefix := pd.Prefix
 
-			if ctx.Verbose {
-				fmt.Printf("Processing policy ID='%s' for group '%s'.\n", policyID, cfg.GroupName)
-			}
+			fmt.Printf("Processing policy ID='%s' for group '%s'.\n", policyID, cfg.GroupName)
 
 			// get schedule
 			schedule, err := getDailyAssignmentScheduleForDateRange(ctx, cfg, startDate, endDate)
@@ -298,33 +296,33 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) err
 				assignments[group].SlotName = fmt.Sprintf("Slot_%s_%s%s_%06X", policy.Name, prefix, group, r1.Intn(1<<24))
 			}
 
-			if ctx.Verbose {
-				fmt.Printf("Fetched policy '%s' and will perform following actions:\n", policy.Name)
+			fmt.Printf("Fetched policy '%s' and will perform following actions:\n", policy.Name)
 
-				for n, tierID := range tierIDs {
-					for m := range tierAssignments[n] {
+			for n, tierID := range tierIDs {
+				for m := range tierAssignments[n] {
+					fmt.Printf(
+						"- create schedule '%s' with %d layer(s) for group '%s' for rule ID='%s', with following user(s):\n",
+						tierAssignments[n][m].SlotName,
+						len(tierAssignments[n][m].Assignments),
+						tierAssignments[n][m].Group,
+						tierID,
+					)
+					for l := range tierAssignments[n][m].Assignments {
 						fmt.Printf(
-							"- create schedule '%s' with %d layer(s) for group '%s' for rule ID='%s', with following user(s):\n",
-							tierAssignments[n][m].SlotName,
-							len(tierAssignments[n][m].Assignments),
-							tierAssignments[n][m].Group,
-							tierID,
+							"\t- layer '%s': \t%s\n",
+							daysOfWeek[tierAssignments[n][m].Assignments[l].DayOfWeek],
+							tierAssignments[n][m].Assignments[l].User,
 						)
-						for l := range tierAssignments[n][m].Assignments {
-							fmt.Printf(
-								"\t- layer '%s': \t%s\n",
-								daysOfWeek[tierAssignments[n][m].Assignments[l].DayOfWeek],
-								tierAssignments[n][m].Assignments[l].User,
-							)
-						}
 					}
-					fmt.Printf("- this will result in total %d schedule(s) per rule ID='%s'\n", len(tierAssignments[n]), tierID)
 				}
+				fmt.Printf("- this will result in total %d schedule(s) per rule ID='%s'\n", len(tierAssignments[n]), tierID)
+			}
 
-				for n := range oldSchedules {
-					fmt.Printf("- attempt to unassign and delete old schedule: %s (ID: '%s')\n", oldSchedules[n].Name, oldSchedules[n].ID)
-				}
+			for n := range oldSchedules {
+				fmt.Printf("- attempt to unassign and delete old schedule: %s (ID: '%s')\n", oldSchedules[n].Name, oldSchedules[n].ID)
+			}
 
+			if ctx.Verbose {
 				fmt.Printf("Proceed? [y/N] ")
 
 				reader := bufio.NewReader(os.Stdin)
@@ -333,8 +331,9 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) err
 					fmt.Println("Aborting.")
 					continue
 				}
-				fmt.Println("Proceeding")
 			}
+
+			fmt.Println("Proceeding")
 
 			// execution phase
 
@@ -357,9 +356,7 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) err
 				ctx.pagerduty.DeleteSchedule(oldSchedules[n].ID)
 			}
 
-			if ctx.Verbose {
-				fmt.Println("Policy updated")
-			}
+			fmt.Println("Policy updated")
 		}
 	}
 

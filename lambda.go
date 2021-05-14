@@ -13,8 +13,10 @@ import (
 )
 
 type spreadsheetBotEvent struct {
-	Cmd string `json:"command"`
-	Ts  string `json:"timestamp"`
+	Cmd          string `json:"command"`
+	Ts           string `json:"timestamp"`
+	Overlap      bool   `json:"overlap"`
+	FilterGroups string `json:"filterGroups"`
 }
 
 func handleLambdaEvent(event spreadsheetBotEvent) error {
@@ -23,7 +25,7 @@ func handleLambdaEvent(event spreadsheetBotEvent) error {
 	}
 	ctx := spbot.CreateContext("config", &io)
 
-	fmt.Println("Running command", event.Cmd, ", TS=", event.Ts)
+	fmt.Println("Running command", event.Cmd, ", TS=", event.Ts, ", Overlap=", event.Overlap, ", FilterGroups=", event.FilterGroups)
 	ts := time.Now()
 	if event.Ts != "" {
 		i, err := strconv.ParseInt(event.Ts, 10, 64)
@@ -31,6 +33,14 @@ func handleLambdaEvent(event spreadsheetBotEvent) error {
 			return err
 		}
 		ts = time.Unix(i, 0)
+	}
+
+	if event.Overlap {
+		ctx.Overlap = true
+	}
+
+	if event.FilterGroups != "" {
+		ctx.FilterGroups = event.FilterGroups
 	}
 
 	var (
@@ -68,7 +78,9 @@ func handleLambdaEvent(event spreadsheetBotEvent) error {
 		spbot.LoadSlack(ctx)
 		spbot.PerformAssign(ctx, time.Now())
 	case "assignPagerDuty", "assignPagerDutyNextWeek":
+		fmt.Println("Loading PD")
 		spbot.LoadPagerduty(ctx)
+		fmt.Println("Loading Sheets")
 		spbot.LoadSheets(ctx)
 		spbot.PagerDutyAssignTiers(ctx, startDate, endDate)
 	case "verifySlackNames":

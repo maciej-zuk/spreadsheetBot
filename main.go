@@ -26,10 +26,15 @@ func main() {
 
 	verbose := flag.Bool("verbose", true, "increase output verbosity")
 
+	filterGroups := flag.String("filterGroups", "", "filter groups to process (only assignGroups and printSchedule*)")
+	overlap := flag.Bool("overlap", false, "overlap groups with next day (only assignGroups and printSchedule*)")
+
 	flag.Parse()
 	io := spbot.CliIOStrategy{}
 	ctx := spbot.CreateContext(*configFile, &io)
 	ctx.Verbose = *verbose
+	ctx.Overlap = *overlap
+	ctx.FilterGroups = *filterGroups
 
 	var (
 		startDate time.Time

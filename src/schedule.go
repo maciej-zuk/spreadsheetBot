@@ -100,6 +100,9 @@ func getScheduleForDateAsSlackBlocks(
 // PrintScheduleForDateRange  -
 func PrintScheduleForDateRange(ctx *RuntimeContext, startDate, endDate time.Time, title string) {
 	for _, cfg := range ctx.Configs {
+		if len(ctx.FilterGroups) > 0 && !strings.Contains(ctx.FilterGroups, cfg.GroupName) {
+			continue
+		}
 		s, err := getScheduleForDate(ctx, cfg, startDate, endDate, title)
 		if err == nil {
 			fmt.Print(s)

@@ -202,7 +202,7 @@ func LoadSlack(ctx *RuntimeContext) {
 	for i := range ctx.users {
 		userNames[i] = ctx.users[i].RealName
 	}
-	ctx.usersMatcher = closestmatch.New(userNames, []int{2, 3, 4, 5, 6})
+	ctx.usersMatcher = closestmatch.New(userNames, []int{1, 2, 3, 4, 5, 6})
 }
 
 // LoadPagerduty -
@@ -222,5 +222,5 @@ func LoadPagerduty(ctx *RuntimeContext) {
 	for i := range ctx.pdUsers {
 		userNames[i] = ctx.pdUsers[i].Name
 	}
-	ctx.pdUsersMatcher = closestmatch.New(userNames, []int{2, 3, 4, 5, 6})
+	ctx.pdUsersMatcher = closestmatch.New(userNames, []int{1, 2, 3, 4, 5, 6})
 }

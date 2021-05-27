@@ -1,5 +1,7 @@
 package main
 
+// BUILD: docker run --rm -it -v `pwd`:/app amazonlinux bash -c "yum -y install go && cd /app && go build lambda.go"
+
 import (
 	"fmt"
 	"log"

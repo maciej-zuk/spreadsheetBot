@@ -12,19 +12,10 @@
       "assignCharacter": "o"
     }
   ],
-  "googleCredentialsJson": {
-    "installed": {
-      "client_id": "ABCD",
-      "project_id": "ABCD",
-      "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-      "token_uri": "https://oauth2.googleapis.com/token",
-      "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-      "client_secret": "ABCD",
-      "redirect_uris": [
-        "urn:ietf:wg:oauth:2.0:oob",
-        "http://localhost"
-      ]
-    }
+  "googleCredentials": {
+    "client_id": "ABCD",
+    "project_id": "ABCD",
+    "client_secret": "ABCD"
   },
   "slackAccessAPIKey": "xoxp-...",
   "slackBotAPIKey": "xoxb-..."

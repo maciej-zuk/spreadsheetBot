@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/PagerDuty/go-pagerduty"
-	"github.com/schollz/closestmatch"
 	"github.com/slack-go/slack"
 	"google.golang.org/api/sheets/v4"
 )
@@ -69,29 +68,34 @@ type AssignmentsConfig struct {
 	NotifyUsers     bool `json:"notifyUsers"`
 }
 
+// GoogleCredentials -
+type GoogleCredentials struct {
+	ClientID     string `json:"client_id"`
+	ProjectID    string `json:"project_id"`
+	ClientSecret string `json:"client_secret"`
+}
+
 // RuntimeContext -
 type RuntimeContext struct {
-	Configs               []*AssignmentsConfig `json:"configs"`
-	GoogleCredentialsJSON interface{}          `json:"googleCredentialsJson"`
-	GoogleAPIKey          string               `json:"googleAPIKey"`
-	SlackBotAPIKey        string               `json:"slackBotAPIKey"`
-	SlackAccessAPIKey     string               `json:"slackAccessAPIKey"`
-	PagerDutyToken        string               `json:"pagerDutyToken"`
-	FilterGroups          string
-	Verbose               bool
-	Overlap               bool
+	Configs           []*AssignmentsConfig `json:"configs"`
+	GoogleCredentials GoogleCredentials    `json:"googleCredentials"`
+	GoogleAPIKey      string               `json:"googleAPIKey"`
+	SlackBotAPIKey    string               `json:"slackBotAPIKey"`
+	SlackAccessAPIKey string               `json:"slackAccessAPIKey"`
+	PagerDutyToken    string               `json:"pagerDutyToken"`
+	FilterGroups      string
+	Verbose           bool
+	Overlap           bool
 
-	slack          *slack.Client
-	slackP         *slack.Client
-	sheets         *sheets.Service
-	groups         UserGroupList
-	users          UserList
-	pdUsers        PDUserList
-	channels       ChannelList
-	io             IOStrategy
-	usersMatcher   *closestmatch.ClosestMatch
-	pdUsersMatcher *closestmatch.ClosestMatch
-	pagerduty      *pagerduty.Client
+	slack     *slack.Client
+	slackP    *slack.Client
+	sheets    *sheets.Service
+	groups    UserGroupList
+	users     UserList
+	pdUsers   PDUserList
+	channels  ChannelList
+	io        IOStrategy
+	pagerduty *pagerduty.Client
 }
 
 // AssignmentsScheduleEntry  -

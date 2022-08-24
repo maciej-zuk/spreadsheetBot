@@ -86,7 +86,8 @@ func contains(s []string, e string) bool {
 }
 
 func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) error {
-	s1 := rand.NewSource(time.Now().UnixNano())
+	now := time.Now()
+	s1 := rand.NewSource(now.UnixNano())
 	r1 := rand.New(s1)
 
 	for _, cfg := range ctx.Configs {
@@ -191,11 +192,18 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) err
 						fmt.Printf("Unable to match user '%s' to PagerDuty user\n", nameGroup.Name)
 						continue
 					}
+
+					location, err := time.LoadLocation("Europe/Warsaw")
+					if err != nil {
+						location = time.UTC
+					}
+					timeInLocal := time.Date(now.Year(), now.Month(), now.Day(), 16, 0, 0, 0, location)
+
 					// create assignment
 					assignment := &PagerDutySlotAssignment{
 						DayOfWeek: dayOfWeek,
 						User:      fmt.Sprintf("%s|%s -> %s", match.APIObject.ID, nameGroup.Name, match.Name),
-						StartUtc:  "15:00:00",
+						StartUtc:  timeInLocal.In(time.UTC).Format("15:04:05"),
 					}
 					// try to assign to primary group
 					moveToTier2 := false
@@ -280,6 +288,7 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) err
 			// get policy
 			var opts pagerduty.GetEscalationPolicyOptions
 			policy, err := ctx.pagerduty.GetEscalationPolicy(policyID, &opts)
+			policy.Teams = nil
 
 			if err != nil {
 				return errors.Errorf("No policy id='%s'", policyID)
@@ -309,8 +318,9 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) err
 					)
 					for l := range tierAssignments[n][m].Assignments {
 						fmt.Printf(
-							"\t- layer '%s': \t%s\n",
+							"\t- layer '%s'\tstarting at %s@UTC: \t%s\n",
 							daysOfWeek[tierAssignments[n][m].Assignments[l].DayOfWeek],
+							tierAssignments[n][m].Assignments[l].StartUtc,
 							tierAssignments[n][m].Assignments[l].User,
 						)
 					}
@@ -449,7 +459,7 @@ func createSlot(
 		schedule.ScheduleLayers[n].Start = startDate.Format(time.RFC3339)
 		schedule.ScheduleLayers[n].End = endDate.Format(time.RFC3339)
 		schedule.ScheduleLayers[n].RotationVirtualStart = startDate.Format(time.RFC3339)
-		schedule.ScheduleLayers[n].RotationTurnLengthSeconds = 86400
+		schedule.ScheduleLayers[n].RotationTurnLengthSeconds = 24 * 60 * 60
 		schedule.ScheduleLayers[n].Users = make([]pagerduty.UserReference, 1)
 		schedule.ScheduleLayers[n].Users[0].User = pagerduty.APIObject{
 			ID:   strings.Split(a.User, "|")[0],
@@ -458,7 +468,7 @@ func createSlot(
 		schedule.ScheduleLayers[n].Restrictions = make([]pagerduty.Restriction, 1)
 		schedule.ScheduleLayers[n].Restrictions[0].Type = "weekly_restriction"
 		schedule.ScheduleLayers[n].Restrictions[0].StartTimeOfDay = a.StartUtc
-		schedule.ScheduleLayers[n].Restrictions[0].DurationSeconds = 28800
+		schedule.ScheduleLayers[n].Restrictions[0].DurationSeconds = 8 * 60 * 60
 		schedule.ScheduleLayers[n].Restrictions[0].StartDayOfWeek = a.DayOfWeek
 	}
 
@@ -469,7 +479,7 @@ func createSlot(
 		schedule.ScheduleLayers[0].Start = startDate.Format(time.RFC3339)
 		schedule.ScheduleLayers[0].End = startDate.Format(time.RFC3339)
 		schedule.ScheduleLayers[0].RotationVirtualStart = startDate.Format(time.RFC3339)
-		schedule.ScheduleLayers[0].RotationTurnLengthSeconds = 86400
+		schedule.ScheduleLayers[0].RotationTurnLengthSeconds = 24 * 60 * 60
 		schedule.ScheduleLayers[0].Users = make([]pagerduty.UserReference, 1)
 		schedule.ScheduleLayers[0].Users[0].User = pagerduty.APIObject{
 			ID:   ctx.pdUsers[0].APIObject.ID,

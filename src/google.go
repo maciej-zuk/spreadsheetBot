@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net"
 	"net/http"
+	"os/exec"
+	"runtime"
 
 	"github.com/go-errors/errors"
 	"golang.org/x/oauth2"
@@ -14,17 +18,48 @@ import (
 	"google.golang.org/api/sheets/v4"
 )
 
+type fullGoogleCredentials struct {
+	ClientID                string   `json:"client_id"`
+	ProjectID               string   `json:"project_id"`
+	AuthUri                 string   `json:"auth_uri"`
+	TokenUri                string   `json:"token_uri"`
+	AuthProviderX509CertURL string   `json:"auth_provider_x509_cert_url"`
+	ClientSecret            string   `json:"client_secret"`
+	RedirectUris            []string `json:"redirect_uris"`
+	Origins                 []string `json:"javascript_origins"`
+}
+
 func getSheets(ctx *RuntimeContext) (*sheets.Service, error) {
 	var srvc *sheets.Service = nil
 	var err error = nil
 	if ctx.GoogleAPIKey != "" {
+		if ctx.GoogleCredentials.ClientID != "" {
+			fmt.Println("Warn: Both Google api key and Google credentials are present, Google api key takes precedence")
+		}
 		srvc, err = sheets.NewService(context.Background(), option.WithAPIKey(ctx.GoogleAPIKey))
 	}
 	if srvc == nil || err != nil {
-		b, err := json.Marshal(ctx.GoogleCredentialsJSON)
+		if ctx.GoogleCredentials.ClientID == "" || ctx.GoogleCredentials.ProjectID == "" || ctx.GoogleCredentials.ClientSecret == "" {
+			return nil, errors.New("Both Google api key and Google credentials are missing ")
+		}
+
+		googleCredentialsJson := make(map[string]fullGoogleCredentials)
+		googleCredentialsJson["installed"] = fullGoogleCredentials{
+			ClientID:                ctx.GoogleCredentials.ClientID,
+			ProjectID:               ctx.GoogleCredentials.ProjectID,
+			ClientSecret:            ctx.GoogleCredentials.ClientSecret,
+			AuthUri:                 "https://accounts.google.com/o/oauth2/auth",
+			TokenUri:                "https://oauth2.googleapis.com/token",
+			AuthProviderX509CertURL: "https://www.googleapis.com/oauth2/v1/certs",
+			RedirectUris:            []string{"http://localhost:9000/cb"},
+			Origins:                 []string{"http://localhost:9000"},
+		}
+
+		b, err := json.Marshal(googleCredentialsJson)
 		if err != nil {
 			return nil, errors.Wrap(err, 0)
 		}
+
 		config, err := google.ConfigFromJSON(b, "https://www.googleapis.com/auth/spreadsheets.readonly")
 		if err != nil {
 			return nil, errors.Wrap(err, 0)
@@ -63,18 +98,66 @@ func getClient(ctx *RuntimeContext, config *oauth2.Config) (*http.Client, error)
 	return client, err
 }
 
+var adhocServerClose chan bool
+var adhocServerAuthCode string
+
+func adhocAuthRedirect(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	http.Redirect(w, r, ctx.Value("authURL").(string), 302)
+}
+
+func adhocAuthCb(w http.ResponseWriter, r *http.Request) {
+	io.WriteString(w, "Done, you can close the window")
+	adhocServerAuthCode = r.FormValue("code")
+	adhocServerClose <- true
+}
+
+func openbrowser(url string) {
+	var err error
+
+	switch runtime.GOOS {
+	case "linux":
+		err = exec.Command("xdg-open", url).Start()
+	case "windows":
+		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	case "darwin":
+		err = exec.Command("open", url).Start()
+	default:
+		err = fmt.Errorf("unsupported platform")
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+
+}
+
 // Request a token from the web, then returns the retrieved token.
 func getTokenFromWeb(ctx *RuntimeContext, config *oauth2.Config) *oauth2.Token {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
-	fmt.Printf("Go to the following link in your browser then type the "+
-		"authorization code: \n%v\n", authURL)
+	openbrowser("http://localhost:9000/redirect")
 
-	authCode, err := ctx.io.Prompt()
-	if err != nil {
-		log.Fatalf("Unable to read authorization code: %v", err)
+	serverCtx := context.Background()
+	adhocServerClose = make(chan bool)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/redirect", adhocAuthRedirect)
+	mux.HandleFunc("/cb", adhocAuthCb)
+	adhocServer := &http.Server{
+		Addr:    ":9000",
+		Handler: mux,
+		BaseContext: func(l net.Listener) context.Context {
+			return context.WithValue(serverCtx, "authURL", authURL)
+		},
 	}
 
-	tok, err := config.Exchange(context.TODO(), authCode)
+	go func() {
+		adhocServer.ListenAndServe()
+	}()
+
+	<-adhocServerClose
+	adhocServer.Shutdown(serverCtx)
+
+	tok, err := config.Exchange(context.TODO(), adhocServerAuthCode)
 	if err != nil {
 		log.Fatalf("Unable to retrieve token from web: %v", err)
 	}

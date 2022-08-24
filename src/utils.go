@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/PagerDuty/go-pagerduty"
+	"github.com/agnivade/levenshtein"
 	"github.com/go-errors/errors"
-	"github.com/schollz/closestmatch"
 	"github.com/slack-go/slack"
 )
 
@@ -93,23 +93,29 @@ func matchGroupToName(ctx *RuntimeContext, name string) *slack.UserGroup {
 }
 
 func matchUserToName(ctx *RuntimeContext, name string) *slack.User {
-	match := ctx.usersMatcher.Closest(name)
+	best := &ctx.users[0]
+	bestDist := 9999999
 	for n := range ctx.users {
-		if ctx.users[n].RealName == match {
-			return &ctx.users[n]
+		dist := levenshtein.ComputeDistance(ctx.users[n].RealName, name)
+		if dist < bestDist {
+			bestDist = dist
+			best = &ctx.users[n]
 		}
 	}
-	return nil
+	return best
 }
 
 func matchPDUserToName(ctx *RuntimeContext, name string) *pagerduty.User {
-	match := ctx.pdUsersMatcher.Closest(name)
+	best := &ctx.pdUsers[0]
+	bestDist := 9999999
 	for n := range ctx.pdUsers {
-		if ctx.pdUsers[n].Name == match {
-			return &ctx.pdUsers[n]
+		dist := levenshtein.ComputeDistance(ctx.pdUsers[n].Name, name)
+		if dist < bestDist {
+			bestDist = dist
+			best = &ctx.pdUsers[n]
 		}
 	}
-	return nil
+	return best
 }
 
 func matchChannelToName(ctx *RuntimeContext, name string) *slack.Channel {
@@ -184,7 +190,7 @@ func LoadSlack(ctx *RuntimeContext) {
 	for {
 		channels, nextCursor, err := ctx.slack.GetConversations(&slack.GetConversationsParameters{
 			Cursor:          channelsCursor,
-			ExcludeArchived: "true",
+			ExcludeArchived: true,
 			Types:           []string{"public_channel", "private_channel"},
 		})
 		if err != nil {
@@ -197,12 +203,6 @@ func LoadSlack(ctx *RuntimeContext) {
 			break
 		}
 	}
-
-	userNames := make([]string, len(ctx.users))
-	for i := range ctx.users {
-		userNames[i] = ctx.users[i].RealName
-	}
-	ctx.usersMatcher = closestmatch.New(userNames, []int{1, 2, 3, 4, 5, 6})
 }
 
 // LoadPagerduty -
@@ -210,17 +210,11 @@ func LoadPagerduty(ctx *RuntimeContext) {
 	ctx.pagerduty = pagerduty.NewClient(ctx.PagerDutyToken)
 
 	var opts pagerduty.ListUsersOptions
-	opts.Total = 1
+	opts.Total = true
 	opts.Limit = 1000
 	users, err := ctx.pagerduty.ListUsers(opts)
 	if err != nil {
 		log.Fatalln(Stack(errors.Wrap(err, 0)))
 	}
 	ctx.pdUsers = users.Users
-
-	userNames := make([]string, len(ctx.pdUsers))
-	for i := range ctx.pdUsers {
-		userNames[i] = ctx.pdUsers[i].Name
-	}
-	ctx.pdUsersMatcher = closestmatch.New(userNames, []int{1, 2, 3, 4, 5, 6})
 }

@@ -14,7 +14,11 @@
       "assignCharacter": "o" // character that is expected to indicate actual assignment
     } ...
   ],
-  "googleCredentialsJson": {...}, // or "googleAPIKey"
+  "googleCredentials": {
+    "client_id": "...",
+    "project_id": "...",
+    "client_secret": "..."
+  }, // or "googleAPIKey"
   "slackAccessAPIKey": "xoxp-...",
   "slackBotAPIKey": "xoxb-..."
 }
@@ -47,7 +51,8 @@ User scope should be created by workspace admin.
 
 ### Required Google API scopes:
 Create Google project here https://console.developers.google.com/
-API key should be enough fo read-only access of globally accessible spreadsheets.
+API key (`googleAPIKey`) should be enough fo read-only access of globally accessible spreadsheets.
+
 OAuth credentials has to be created for organization scoped spreadsheets.
 
 Add Spreadsheets API and following OAuth scope:
@@ -55,7 +60,10 @@ Add Spreadsheets API and following OAuth scope:
 ../auth/spreadsheets.readonly
 ```
 
-First run will prompt for client authorization and create additional token file (CLI only).
+Add OAuth2 Web client ID with `http://localhost:9000/cb` added to `Authorised redirect URIs`.
+Copy required fields to `googleCredentials`.
+
+First run perform OAuth2 credentials exchange and create additional token file (CLI only).
 
 ### AWS Lambda:
 It is possible to deploy app on AWS Lambda, just build `lambda.go` rather than `main.go`.

@@ -119,12 +119,16 @@ func matchPDUserToName(ctx *RuntimeContext, name string) *pagerduty.User {
 }
 
 func matchChannelToName(ctx *RuntimeContext, name string) *slack.Channel {
-	for n := range ctx.channels {
-		if ctx.channels[n].Name == name {
-			return &ctx.channels[n]
-		}
+	channel, err := ctx.slack.GetConversationInfo(&slack.GetConversationInfoInput{
+		ChannelID:         name,
+		IncludeLocale:     false,
+		IncludeNumMembers: false,
+	})
+	if err != nil {
+		return nil
 	}
-	return nil
+
+	return channel
 }
 
 // CreateContext -
@@ -183,25 +187,6 @@ func LoadSlack(ctx *RuntimeContext) {
 	ctx.users, err = ctx.slack.GetUsers()
 	if err != nil {
 		log.Fatalln(Stack(errors.Wrap(err, 0)))
-	}
-
-	ctx.channels = make([]slack.Channel, 0)
-	channelsCursor := ""
-	for {
-		channels, nextCursor, err := ctx.slack.GetConversations(&slack.GetConversationsParameters{
-			Cursor:          channelsCursor,
-			ExcludeArchived: true,
-			Types:           []string{"public_channel", "private_channel"},
-		})
-		if err != nil {
-			log.Fatalln(Stack(errors.Wrap(err, 0)))
-		}
-		ctx.channels = append(ctx.channels, channels...)
-		if nextCursor != "" {
-			channelsCursor = nextCursor
-		} else {
-			break
-		}
 	}
 }
 

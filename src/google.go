@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"os/exec"
@@ -112,7 +111,7 @@ func adhocAuthCb(w http.ResponseWriter, r *http.Request) {
 	adhocServerClose <- true
 }
 
-func openbrowser(url string) {
+func openbrowser(ctx *RuntimeContext, url string) {
 	var err error
 
 	switch runtime.GOOS {
@@ -126,7 +125,7 @@ func openbrowser(url string) {
 		err = fmt.Errorf("unsupported platform")
 	}
 	if err != nil {
-		log.Fatal(err)
+		ctx.io.Fatal(fmt.Sprintf("%v", err))
 	}
 
 }
@@ -134,7 +133,7 @@ func openbrowser(url string) {
 // Request a token from the web, then returns the retrieved token.
 func getTokenFromWeb(ctx *RuntimeContext, config *oauth2.Config) *oauth2.Token {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
-	openbrowser("http://localhost:9000/redirect")
+	openbrowser(ctx, "http://localhost:9000/redirect")
 
 	serverCtx := context.Background()
 	adhocServerClose = make(chan bool)
@@ -159,7 +158,7 @@ func getTokenFromWeb(ctx *RuntimeContext, config *oauth2.Config) *oauth2.Token {
 
 	tok, err := config.Exchange(context.TODO(), adhocServerAuthCode)
 	if err != nil {
-		log.Fatalf("Unable to retrieve token from web: %v", err)
+		ctx.io.Fatal(fmt.Sprintf("Unable to retrieve token from web: %v", err))
 	}
 	return tok
 }

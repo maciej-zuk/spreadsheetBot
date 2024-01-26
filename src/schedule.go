@@ -2,7 +2,6 @@ package src
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -120,12 +119,11 @@ func NotifySlackOfScheduleForDateRange(ctx *RuntimeContext, startDate, endDate t
 		if channel := matchChannelToName(ctx, cfg.NotifyChannel); channel != nil {
 			channelID = channel.ID
 		} else {
-			log.Println("Skipping missing or nonexisting channel for group", cfg.GroupName)
-			continue
+			ctx.io.Fatal(fmt.Sprintln("Skipping missing or nonexisting channel for group", cfg.GroupName))
 		}
 		blocks, err := getScheduleForDateAsSlackBlocks(ctx, cfg, startDate, endDate, title)
 		if err != nil {
-			log.Println("Unable to notify Slack about schedule for group", cfg.GroupName)
+			ctx.io.Fatal(fmt.Sprintln("Unable to notify Slack about schedule for group", cfg.GroupName))
 		}
 
 		ctx.slack.JoinConversation(channelID)

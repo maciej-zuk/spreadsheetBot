@@ -3,7 +3,6 @@ package src
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"math"
 	"strings"
 	"time"
@@ -138,12 +137,12 @@ func CreateContext(fileName string, io IOStrategy) *RuntimeContext {
 	runtimeContext.Verbose = false
 	configFile, err := io.LoadBytes(fileName)
 	if err != nil {
-		log.Fatalln(Stack(errors.Wrap(err, 0)))
+		io.Fatal(Stack(errors.Wrap(err, 0)))
 	}
 
 	err = json.Unmarshal(configFile, &runtimeContext)
 	if err != nil {
-		log.Fatalln(Stack(errors.Wrap(err, 0)))
+		io.Fatal(Stack(errors.Wrap(err, 0)))
 	}
 
 	for n, cfg := range runtimeContext.Configs {
@@ -169,7 +168,7 @@ func LoadSheets(ctx *RuntimeContext) {
 	var err error
 	ctx.sheets, err = getSheets(ctx)
 	if err != nil {
-		log.Fatalln(Stack(errors.Wrap(err, 0)))
+		ctx.io.Fatal(Stack(errors.Wrap(err, 0)))
 	}
 }
 
@@ -181,12 +180,12 @@ func LoadSlack(ctx *RuntimeContext) {
 
 	ctx.groups, err = ctx.slack.GetUserGroups()
 	if err != nil {
-		log.Fatalln(Stack(errors.Wrap(err, 0)))
+		ctx.io.Fatal(Stack(errors.Wrap(err, 0)))
 	}
 
 	ctx.users, err = ctx.slack.GetUsers()
 	if err != nil {
-		log.Fatalln(Stack(errors.Wrap(err, 0)))
+		ctx.io.Fatal(Stack(errors.Wrap(err, 0)))
 	}
 }
 
@@ -199,7 +198,7 @@ func LoadPagerduty(ctx *RuntimeContext) {
 	opts.Limit = 1000
 	users, err := ctx.pagerduty.ListUsers(opts)
 	if err != nil {
-		log.Fatalln(Stack(errors.Wrap(err, 0)))
+		ctx.io.Fatal(Stack(errors.Wrap(err, 0)))
 	}
 	ctx.pdUsers = users.Users
 }

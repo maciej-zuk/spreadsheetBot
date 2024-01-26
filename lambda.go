@@ -3,8 +3,8 @@ package main
 // BUILD: docker run --rm -it -v `pwd`:/app amazonlinux bash -c "yum -y install go && cd /app && go build lambda.go"
 
 import (
+	"errors"
 	"fmt"
-	"log"
 	"os"
 	spbot "spbot/src"
 	srclambda "spbot/srclambda"
@@ -21,7 +21,13 @@ type spreadsheetBotEvent struct {
 	FilterGroups string `json:"filterGroups"`
 }
 
-func handleLambdaEvent(event spreadsheetBotEvent) error {
+func handleLambdaEvent(event spreadsheetBotEvent) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = errors.New(fmt.Sprintf("Panic: %v", r))
+		}
+	}()
+
 	io := srclambda.SSMIOStrategy{
 		KeyPrefix: os.Getenv("SSM_KEY_PREFIX"),
 	}
@@ -94,7 +100,7 @@ func handleLambdaEvent(event spreadsheetBotEvent) error {
 		spbot.LoadPagerduty(ctx)
 		spbot.VerifyPagerDutyNames(ctx)
 	default:
-		log.Fatalln("No command specified")
+		io.Fatal("No command specified")
 	}
 
 	return nil

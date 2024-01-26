@@ -3,6 +3,7 @@ package src
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"time"
 
@@ -12,12 +13,15 @@ import (
 )
 
 // IOStrategy -
+
+// IOStrategy -
 type IOStrategy interface {
 	Load(name string) (string, error)
 	LoadBytes(name string) ([]byte, error)
 	Save(name string, value string) error
 	SaveBytes(name string, value []byte) error
 	Prompt() (string, error)
+	Fatal(string)
 }
 
 // PagerDutySlotAssignment -
@@ -46,6 +50,10 @@ type PagerDutyConfig struct {
 	PolicyID string   `json:"policyID"`
 	Groups   []string `json:"groups"`
 	TierIDs  []string `json:"tierIDs"`
+	Start    uint     `json:"start"`
+	Duration uint     `json:"duration"`
+	Timezone string   `json:"timezone"`
+	Append   bool     `json:"append"`
 }
 
 // AssignmentsConfig -
@@ -156,4 +164,9 @@ func (a *CliIOStrategy) Prompt() (string, error) {
 	var str string
 	_, err := fmt.Scan(&str)
 	return str, err
+}
+
+// Fatal -
+func (a *CliIOStrategy) Fatal(err string) {
+	log.Fatalln(err)
 }

@@ -72,7 +72,7 @@ func VerifyPagerDutyNames(ctx *RuntimeContext) {
 func PagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) {
 	err := pagerDutyAssignTiers(ctx, startDate, endDate)
 	if err != nil {
-		log.Println(Stack(err))
+		ctx.io.Fatal(Stack(err))
 	}
 }
 
@@ -193,11 +193,11 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) err
 						continue
 					}
 
-					location, err := time.LoadLocation("Europe/Warsaw")
+					location, err := time.LoadLocation(pd.Timezone)
 					if err != nil {
 						location = time.UTC
 					}
-					timeInLocal := time.Date(now.Year(), now.Month(), now.Day(), 16, 0, 0, 0, location)
+					timeInLocal := time.Date(now.Year(), now.Month(), now.Day(), int(pd.Start), 0, 0, 0, location)
 
 					// create assignment
 					assignment := &PagerDutySlotAssignment{
@@ -295,10 +295,12 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) err
 			}
 
 			// clear old schedules from policy
-			oldSchedules, err := clearAutoSchedules(ctx, policy, prefix)
-
-			if err != nil {
-				return err
+			var oldSchedules []pagerduty.Schedule
+			if !pd.Append {
+				oldSchedules, err = clearAutoSchedules(ctx, policy, prefix)
+				if err != nil {
+					return err
+				}
 			}
 
 			for _, group := range groups {
@@ -309,13 +311,24 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) err
 
 			for n, tierID := range tierIDs {
 				for m := range tierAssignments[n] {
-					fmt.Printf(
-						"- create schedule '%s' with %d layer(s) for group '%s' for rule ID='%s', with following user(s):\n",
-						tierAssignments[n][m].SlotName,
-						len(tierAssignments[n][m].Assignments),
-						tierAssignments[n][m].Group,
-						tierID,
-					)
+					if pd.Append {
+						fmt.Printf(
+							"- append schedule for policy %s with %d layer(s) for group '%s' for rule ID='%s', with following user(s):\n",
+							policy.Name,
+							tierAssignments[n][m].SlotName,
+							len(tierAssignments[n][m].Assignments),
+							tierAssignments[n][m].Group,
+							tierID,
+						)
+					} else {
+						fmt.Printf(
+							"- create schedule '%s' with %d layer(s) for group '%s' for rule ID='%s', with following user(s):\n",
+							tierAssignments[n][m].SlotName,
+							len(tierAssignments[n][m].Assignments),
+							tierAssignments[n][m].Group,
+							tierID,
+						)
+					}
 					for l := range tierAssignments[n][m].Assignments {
 						fmt.Printf(
 							"\t- layer '%s'\tstarting at %s@UTC: \t%s\n",
@@ -347,26 +360,38 @@ func pagerDutyAssignTiers(ctx *RuntimeContext, startDate, endDate time.Time) err
 
 			// execution phase
 
-			// create new schedules
-			for n, tierID := range tierIDs {
-				err = fillTier(ctx, policy, tierID, tierAssignments[n], startDate, endDate)
-				if err != nil {
-					return err
+			if pd.Append {
+				// append existing schedules
+				for n, tierID := range tierIDs {
+					err = appendTier(ctx, policy, tierID, tierAssignments[n], startDate, endDate, pd.Duration)
+					if err != nil {
+						return err
+					}
 				}
-			}
 
-			// update policy
-			_, err = ctx.pagerduty.UpdateEscalationPolicy(policyID, policy)
-			if err != nil {
-				return errors.Wrap(err, 0)
-			}
+				fmt.Println("Policy updated - schedule appended")
+			} else {
+				// create new schedules
+				for n, tierID := range tierIDs {
+					err = fillTier(ctx, policy, tierID, tierAssignments[n], startDate, endDate, pd.Duration)
+					if err != nil {
+						return err
+					}
+				}
 
-			// remove old schedules
-			for n := range oldSchedules {
-				ctx.pagerduty.DeleteSchedule(oldSchedules[n].ID)
-			}
+				// update policy
+				_, err = ctx.pagerduty.UpdateEscalationPolicy(policyID, policy)
+				if err != nil {
+					return errors.Wrap(err, 0)
+				}
 
-			fmt.Println("Policy updated")
+				// remove old schedules
+				for n := range oldSchedules {
+					ctx.pagerduty.DeleteSchedule(oldSchedules[n].ID)
+				}
+
+				fmt.Println("Policy updated")
+			}
 		}
 	}
 
@@ -409,6 +434,7 @@ func fillTier(
 	assignments []*PagerDutyTierAssignment,
 	startDate time.Time,
 	endDate time.Time,
+	duration uint,
 ) error {
 	var ruleNo = -1
 	for n, rule := range policy.EscalationRules {
@@ -429,6 +455,7 @@ func fillTier(
 			a.Assignments,
 			startDate,
 			endDate,
+			duration,
 		)
 		if err != nil {
 			return err
@@ -447,6 +474,7 @@ func createSlot(
 	assignments []*PagerDutySlotAssignment,
 	startDate time.Time,
 	endDate time.Time,
+	duration uint,
 ) (*pagerduty.Schedule, error) {
 	var schedule pagerduty.Schedule
 	schedule.Name = slotName
@@ -468,7 +496,7 @@ func createSlot(
 		schedule.ScheduleLayers[n].Restrictions = make([]pagerduty.Restriction, 1)
 		schedule.ScheduleLayers[n].Restrictions[0].Type = "weekly_restriction"
 		schedule.ScheduleLayers[n].Restrictions[0].StartTimeOfDay = a.StartUtc
-		schedule.ScheduleLayers[n].Restrictions[0].DurationSeconds = 8 * 60 * 60
+		schedule.ScheduleLayers[n].Restrictions[0].DurationSeconds = duration * 60 * 60
 		schedule.ScheduleLayers[n].Restrictions[0].StartDayOfWeek = a.DayOfWeek
 	}
 
@@ -490,6 +518,85 @@ func createSlot(
 	}
 
 	savedSchedule, err := ctx.pagerduty.CreateSchedule(schedule)
+
+	if err != nil {
+		return nil, errors.Wrap(err, 0)
+	}
+
+	return savedSchedule, err
+}
+
+func appendTier(
+	ctx *RuntimeContext,
+	policy *pagerduty.EscalationPolicy,
+	ruleID string,
+	assignments []*PagerDutyTierAssignment,
+	startDate time.Time,
+	endDate time.Time,
+	duration uint,
+) error {
+	var ruleNo = -1
+	for n, rule := range policy.EscalationRules {
+		if rule.ID == ruleID {
+			ruleNo = n
+		}
+	}
+
+	if ruleNo == -1 {
+		return errors.Errorf("No rule id='%s'", ruleID)
+	}
+
+	for n, a := range assignments {
+		if policy.EscalationRules[ruleNo].Targets[n].Type != "schedule_reference" {
+			return errors.Errorf("Policy ID='%s' at tier ID='%s', entry '%n' is not targetting a schedule", policy.ID, ruleID, n)
+		}
+		fmt.Println("Fetching schedule", policy.EscalationRules[ruleNo].Targets[n].ID)
+		opts := pagerduty.GetScheduleOptions{}
+		schedule, err := ctx.pagerduty.GetSchedule(policy.EscalationRules[ruleNo].Targets[n].ID, opts)
+		if err != nil {
+			return errors.Wrap(err, 0)
+		}
+
+		_, err = appendSlot(ctx, schedule, a.Assignments, startDate, endDate, duration)
+
+		if err != nil {
+			return err
+		}
+
+	}
+	return nil
+}
+
+func appendSlot(
+	ctx *RuntimeContext,
+	schedule *pagerduty.Schedule,
+	assignments []*PagerDutySlotAssignment,
+	startDate time.Time,
+	endDate time.Time,
+	duration uint,
+) (*pagerduty.Schedule, error) {
+	for _, a := range assignments {
+		layer := pagerduty.ScheduleLayer{
+			Name:                      daysOfWeek[a.DayOfWeek],
+			Start:                     startDate.Format(time.RFC3339),
+			End:                       endDate.Format(time.RFC3339),
+			RotationVirtualStart:      startDate.Format(time.RFC3339),
+			RotationTurnLengthSeconds: 24 * 60 * 60,
+			Users:                     make([]pagerduty.UserReference, 1),
+			Restrictions:              make([]pagerduty.Restriction, 1),
+		}
+		layer.Users[0].User = pagerduty.APIObject{
+			ID:   strings.Split(a.User, "|")[0],
+			Type: "user_reference",
+		}
+		layer.Restrictions[0].Type = "weekly_restriction"
+		layer.Restrictions[0].StartTimeOfDay = a.StartUtc
+		layer.Restrictions[0].DurationSeconds = duration * 60 * 60
+		layer.Restrictions[0].StartDayOfWeek = a.DayOfWeek
+		schedule.ScheduleLayers = append(schedule.ScheduleLayers, layer)
+	}
+
+	savedSchedule, err := ctx.pagerduty.UpdateSchedule(schedule.ID, *schedule)
 
 	if err != nil {
 		return nil, errors.Wrap(err, 0)

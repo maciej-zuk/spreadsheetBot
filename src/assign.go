@@ -1,10 +1,13 @@
 package src
 
 import (
+	"fmt"
 	"log"
 	"strings"
 	"time"
 )
+
+// PerformAssign  -
 
 // PerformAssign  -
 func PerformAssign(ctx *RuntimeContext, date time.Time) {
@@ -15,9 +18,7 @@ func PerformAssign(ctx *RuntimeContext, date time.Time) {
 
 		names, err := getCurrentAssignment(ctx, cfg, date)
 		if err != nil {
-			log.Println("Error while loading assigned people from spreadsheet for group", cfg.GroupName, ":", err)
-			log.Println(Stack(err))
-			continue
+			ctx.io.Fatal(fmt.Sprintln("Error while loading assigned people from spreadsheet for group", cfg.GroupName, ":", err, Stack(err)))
 		}
 		if len(names) == 0 {
 			// do not clear assignments on keepWhenMissing
@@ -29,9 +30,7 @@ func PerformAssign(ctx *RuntimeContext, date time.Time) {
 		}
 		err = assignUsersToUserGroups(ctx, names, cfg)
 		if err != nil {
-			log.Println("Error while assigning user group", cfg.GroupName, ":", err)
-			log.Println(Stack(err))
-			continue
+			ctx.io.Fatal(fmt.Sprintln("Error while assigning user group", cfg.GroupName, ":", err, Stack(err)))
 		}
 	}
 }

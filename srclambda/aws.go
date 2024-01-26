@@ -59,3 +59,8 @@ func (a *SSMIOStrategy) SaveBytes(name string, value []byte) error {
 func (a *SSMIOStrategy) Prompt() (string, error) {
 	return "", errors.Errorf("Unable to get user input from within AWS Lambda")
 }
+
+// Fatal -
+func (a *SSMIOStrategy) Fatal(err string) {
+	panic(err)
+}
